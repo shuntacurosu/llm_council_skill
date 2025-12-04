@@ -67,6 +67,12 @@ def format_results(results: Dict[str, Any]) -> str:
     output.append("LLM COUNCIL RESULTS")
     output.append("=" * 80)
     
+    # Check for errors
+    if 'error' in results:
+        output.append(f"\nError: {results['error']}")
+        output.append("=" * 80)
+        return "\n".join(output)
+    
     # Query
     output.append(f"\nQuery: {results.get('query', 'N/A')}")
     output.append("")
@@ -123,10 +129,13 @@ def format_results(results: Dict[str, Any]) -> str:
     output.append("STAGE 3: Chairman's Final Synthesis")
     output.append("-" * 80)
     
-    stage3 = results.get('stage3', {})
-    output.append(f"\nChairman Model: {stage3.get('model', 'Unknown')}")
-    output.append("-" * 40)
-    output.append(stage3.get('response', 'No synthesis available'))
+    stage3 = results.get('stage3')
+    if stage3:
+        output.append(f"\nChairman Model: {stage3.get('model', 'Unknown')}")
+        output.append("-" * 40)
+        output.append(stage3.get('response', 'No synthesis available'))
+    else:
+        output.append("\nNo synthesis available (council did not return responses)")
     output.append("")
     
     output.append("=" * 80)

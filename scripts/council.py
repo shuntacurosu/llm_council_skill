@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 
 from config import get_config
-from openrouter_client import OpenRouterClient
+from unified_client import UnifiedLLMClient
 from worktree_manager import WorktreeManager
 from prompts.templates import (
     STAGE1_PROMPT,
@@ -29,10 +29,15 @@ class CouncilOrchestrator:
             repo_root: Root directory of the git repository
         """
         self.config = get_config()
-        self.client = OpenRouterClient(
-            api_key=self.config.openrouter_api_key,
-            api_url=self.config.openrouter_api_url
+        self.repo_root = repo_root
+        
+        # Use unified client that supports multiple providers
+        self.client = UnifiedLLMClient(
+            openrouter_api_key=self.config.openrouter_api_key,
+            openrouter_api_url=self.config.openrouter_api_url,
+            working_dir=repo_root
         )
+        
         self.worktree_manager = WorktreeManager(
             repo_root=repo_root,
             worktrees_dir=self.config.worktrees_dir
@@ -53,36 +58,42 @@ class CouncilOrchestrator:
         Returns:
             List of dicts with 'model', 'response', and optionally 'worktree_path', 'diff'
         """
-        models = self.config.get_council_models()
+        members = self.config.get_council_members()
         
         # Prepare worktrees if needed (use index as key to handle duplicate models)
         worktree_paths = {}
+        working_dirs = {}
         if use_worktrees:
-            for i, model in enumerate(models):
+            for i, member in enumerate(members):
                 # Replace invalid characters for Windows directory names
-                safe_model_name = model.replace('/', '_').replace(':', '_')
+                safe_model_name = member["full_name"].replace('/', '_').replace(':', '_')
                 member_id = f"member_{i}_{safe_model_name}"
                 try:
                     worktree_path = self.worktree_manager.create_worktree(member_id)
                     worktree_paths[i] = (member_id, worktree_path)
+                    working_dirs[i] = worktree_path
                 except Exception as e:
-                    print(f"Failed to create worktree for {model}: {e}")
+                    print(f"Failed to create worktree for {member['full_name']}: {e}")
         
         # Prepare messages
         messages = [{"role": "user", "content": user_query}]
         
-        # Query all models in parallel
-        responses = await self.client.query_models_parallel(models, messages)
+        # Query all members in parallel using unified client
+        responses = await self.client.query_members_parallel(
+            members=members,
+            messages=messages,
+            working_dirs=working_dirs if use_worktrees else None
+        )
         
         # Format results
         stage1_results = []
-        for i, item in enumerate(responses):
-            model = item['model']
-            response = item['response']
+        for item in responses:
+            i = item['member_index']
             result = {
-                "model": model,
+                "model": item['full_name'],
+                "provider": item['provider'],
                 "member_index": i,
-                "response": response.get('content', '')
+                "response": item['response'].get('content', '')
             }
             
             # Add worktree information if applicable
@@ -155,19 +166,21 @@ class CouncilOrchestrator:
         
         messages = [{"role": "user", "content": ranking_prompt}]
         
-        # Get rankings from all council models in parallel
-        models = self.config.get_council_models()
-        responses = await self.client.query_models_parallel(models, messages)
+        # Get rankings from all council members in parallel
+        members = self.config.get_council_members()
+        responses = await self.client.query_members_parallel(
+            members=members,
+            messages=messages
+        )
         
         # Format results
         stage2_results = []
         for item in responses:
-            model = item['model']
-            response = item['response']
-            full_text = response.get('content', '')
+            full_text = item['response'].get('content', '')
             parsed = self._parse_ranking_from_text(full_text)
             stage2_results.append({
-                "model": model,
+                "model": item['full_name'],
+                "provider": item['provider'],
                 "ranking": full_text,
                 "parsed_ranking": parsed
             })
@@ -219,18 +232,20 @@ class CouncilOrchestrator:
         messages = [{"role": "user", "content": chairman_prompt}]
         
         # Query the chairman model
-        chairman_model = self.config.get_chairman_model()
-        response = await self.client.query_model(chairman_model, messages)
+        chairman = self.config.get_chairman()
+        response = await self.client.query_member(chairman, messages)
         
         if response is None:
             # Fallback if chairman fails
             return {
-                "model": chairman_model,
+                "model": chairman['full_name'],
+                "provider": chairman['provider'],
                 "response": "Error: Unable to generate final synthesis."
             }
         
         return {
-            "model": chairman_model,
+            "model": chairman['full_name'],
+            "provider": chairman['provider'],
             "response": response.get('content', '')
         }
     
