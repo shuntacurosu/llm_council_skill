@@ -1,0 +1,291 @@
+"""Git worktree management for LLM Council members."""
+
+import subprocess
+import shutil
+from pathlib import Path
+from typing import List, Dict, Optional, Tuple
+import hashlib
+import re
+
+
+class WorktreeManager:
+    """Manages git worktrees for council members."""
+    
+    def __init__(self, repo_root: Path, worktrees_dir: Path):
+        """
+        Initialize the worktree manager.
+        
+        Args:
+            repo_root: Root directory of the git repository
+            worktrees_dir: Directory where worktrees will be created
+        """
+        self.repo_root = Path(repo_root)
+        self.worktrees_dir = Path(worktrees_dir)
+        self.worktrees_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Verify we're in a git repository
+        if not (self.repo_root / ".git").exists():
+            raise ValueError(f"{self.repo_root} is not a git repository")
+    
+    def _run_git_command(self, args: List[str], cwd: Optional[Path] = None) -> Tuple[int, str, str]:
+        """
+        Run a git command and return the result.
+        
+        Args:
+            args: Git command arguments
+            cwd: Working directory (defaults to repo_root)
+            
+        Returns:
+            Tuple of (returncode, stdout, stderr)
+        """
+        if cwd is None:
+            cwd = self.repo_root
+        
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        return result.returncode, result.stdout, result.stderr
+    
+    def create_worktree(self, member_id: str, branch_name: Optional[str] = None) -> Path:
+        """
+        Create a new worktree for a council member.
+        
+        Args:
+            member_id: Unique identifier for the council member
+            branch_name: Optional branch name (auto-generated if not provided)
+            
+        Returns:
+            Path to the created worktree
+        """
+        # Generate safe branch name
+        if branch_name is None:
+            # Create a unique branch name based on member_id and timestamp
+            safe_id = re.sub(r'[^a-zA-Z0-9_-]', '_', member_id)
+            branch_name = f"council/{safe_id}"
+        
+        # Worktree path
+        worktree_path = self.worktrees_dir / member_id
+        
+        # Remove existing worktree if it exists
+        if worktree_path.exists():
+            self.remove_worktree(member_id)
+        
+        # Create the worktree (create new branch from HEAD)
+        returncode, stdout, stderr = self._run_git_command([
+            "worktree", "add", "-b", branch_name, str(worktree_path), "HEAD"
+        ])
+        
+        if returncode != 0:
+            # Branch might already exist, try without -b
+            returncode, stdout, stderr = self._run_git_command([
+                "worktree", "add", str(worktree_path), branch_name
+            ])
+            
+            if returncode != 0:
+                raise RuntimeError(f"Failed to create worktree: {stderr}")
+        
+        return worktree_path
+    
+    def remove_worktree(self, member_id: str, force: bool = True):
+        """
+        Remove a worktree for a council member.
+        
+        Args:
+            member_id: Unique identifier for the council member
+            force: Force removal even if worktree has uncommitted changes
+        """
+        worktree_path = self.worktrees_dir / member_id
+        
+        if not worktree_path.exists():
+            return
+        
+        # Remove the worktree
+        args = ["worktree", "remove", str(worktree_path)]
+        if force:
+            args.append("--force")
+        
+        returncode, stdout, stderr = self._run_git_command(args)
+        
+        if returncode != 0 and worktree_path.exists():
+            # If git command failed, manually remove the directory
+            shutil.rmtree(worktree_path, ignore_errors=True)
+    
+    def get_worktree_diff(self, member_id: str) -> str:
+        """
+        Get the diff of changes in a worktree.
+        
+        Args:
+            member_id: Unique identifier for the council member
+            
+        Returns:
+            Git diff output
+        """
+        worktree_path = self.worktrees_dir / member_id
+        
+        if not worktree_path.exists():
+            raise ValueError(f"Worktree for {member_id} does not exist")
+        
+        # Get diff of all changes (staged and unstaged)
+        returncode, stdout, stderr = self._run_git_command(
+            ["diff", "HEAD"],
+            cwd=worktree_path
+        )
+        
+        if returncode != 0:
+            # Try getting unstaged changes only
+            returncode, stdout, stderr = self._run_git_command(
+                ["diff"],
+                cwd=worktree_path
+            )
+        
+        return stdout
+    
+    def anonymize_diff(self, diff: str, member_id: str) -> str:
+        """
+        Anonymize a diff by removing identifying information.
+        
+        Args:
+            diff: Git diff output
+            member_id: Council member identifier to anonymize
+            
+        Returns:
+            Anonymized diff
+        """
+        # Create a hash-based anonymous label
+        hash_obj = hashlib.md5(member_id.encode())
+        anon_label = f"Member_{hash_obj.hexdigest()[:8]}"
+        
+        # Replace member_id with anonymous label
+        anonymized = diff.replace(member_id, anon_label)
+        
+        # Remove any author/committer information
+        anonymized = re.sub(r'Author:.*\n', '', anonymized)
+        anonymized = re.sub(r'Committer:.*\n', '', anonymized)
+        anonymized = re.sub(r'Date:.*\n', '', anonymized)
+        
+        return anonymized
+    
+    def commit_changes(self, member_id: str, message: str) -> bool:
+        """
+        Commit all changes in a worktree.
+        
+        Args:
+            member_id: Unique identifier for the council member
+            message: Commit message
+            
+        Returns:
+            True if changes were committed, False if nothing to commit
+        """
+        worktree_path = self.worktrees_dir / member_id
+        
+        if not worktree_path.exists():
+            raise ValueError(f"Worktree for {member_id} does not exist")
+        
+        # Stage all changes
+        returncode, stdout, stderr = self._run_git_command(
+            ["add", "-A"],
+            cwd=worktree_path
+        )
+        
+        if returncode != 0:
+            raise RuntimeError(f"Failed to stage changes: {stderr}")
+        
+        # Commit changes
+        returncode, stdout, stderr = self._run_git_command(
+            ["commit", "-m", message],
+            cwd=worktree_path
+        )
+        
+        if returncode != 0:
+            # Check if there were no changes to commit
+            if "nothing to commit" in stdout or "nothing to commit" in stderr:
+                return False
+            raise RuntimeError(f"Failed to commit changes: {stderr}")
+        
+        return True
+    
+    def apply_changes_to_main(self, member_id: str, strategy: str = "merge") -> bool:
+        """
+        Apply changes from a worktree to the main branch.
+        
+        Args:
+            member_id: Unique identifier for the council member
+            strategy: How to apply changes ("merge" or "cherry-pick")
+            
+        Returns:
+            True if successful
+        """
+        worktree_path = self.worktrees_dir / member_id
+        
+        if not worktree_path.exists():
+            raise ValueError(f"Worktree for {member_id} does not exist")
+        
+        # Get the branch name from the worktree
+        returncode, branch_name, stderr = self._run_git_command(
+            ["rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=worktree_path
+        )
+        
+        if returncode != 0:
+            raise RuntimeError(f"Failed to get branch name: {stderr}")
+        
+        branch_name = branch_name.strip()
+        
+        # Switch to main branch in repo root
+        returncode, stdout, stderr = self._run_git_command(["checkout", "main"])
+        
+        if returncode != 0:
+            # Try master if main doesn't exist
+            returncode, stdout, stderr = self._run_git_command(["checkout", "master"])
+            if returncode != 0:
+                raise RuntimeError(f"Failed to checkout main/master: {stderr}")
+        
+        # Apply changes
+        if strategy == "merge":
+            returncode, stdout, stderr = self._run_git_command(
+                ["merge", "--no-ff", branch_name, "-m", f"Merge council member {member_id}"]
+            )
+        elif strategy == "cherry-pick":
+            # Get the commit hash from the worktree branch
+            returncode, commit_hash, stderr = self._run_git_command(
+                ["rev-parse", branch_name]
+            )
+            if returncode == 0:
+                commit_hash = commit_hash.strip()
+                returncode, stdout, stderr = self._run_git_command(
+                    ["cherry-pick", commit_hash]
+                )
+        else:
+            raise ValueError(f"Unknown strategy: {strategy}")
+        
+        if returncode != 0:
+            raise RuntimeError(f"Failed to apply changes: {stderr}")
+        
+        return True
+    
+    def cleanup_all_worktrees(self):
+        """Remove all worktrees and clean up."""
+        # List all worktrees
+        returncode, stdout, stderr = self._run_git_command(["worktree", "list"])
+        
+        if returncode == 0:
+            # Parse worktree list and remove non-main worktrees
+            for line in stdout.split('\n'):
+                if line and str(self.worktrees_dir) in line:
+                    # Extract path
+                    path = line.split()[0]
+                    member_id = Path(path).name
+                    try:
+                        self.remove_worktree(member_id, force=True)
+                    except Exception:
+                        pass
+        
+        # Clean up any remaining directories
+        if self.worktrees_dir.exists():
+            for item in self.worktrees_dir.iterdir():
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=True)

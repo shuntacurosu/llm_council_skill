@@ -1,0 +1,16 @@
+.vscode/
+scripts/.env
+
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Conversations
+scripts/conversations/*.json
+
+# Worktrees
+scripts/worktrees/
