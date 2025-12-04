@@ -337,8 +337,16 @@ class CouncilOrchestrator:
         Returns:
             Complete council results with all stages
         """
+        # Clean up any existing worktrees at the start of each session
+        # This ensures a fresh start regardless of previous interruptions
+        if use_worktrees:
+            try:
+                self.worktree_manager.prepare_fresh_worktrees()
+            except Exception as e:
+                print(f"Warning: Failed to prepare worktrees: {e}")
+        
         # Stage 1: Collect individual responses
-        print("Stage 1: Collecting individual responses...")
+        print("Stage 1: Collecting individual responses...", flush=True)
         stage1_results = await self.stage1_collect_responses(user_query, use_worktrees)
         
         if not stage1_results:
@@ -350,7 +358,7 @@ class CouncilOrchestrator:
             }
         
         # Stage 2: Collect peer rankings
-        print("Stage 2: Collecting peer rankings...")
+        print("Stage 2: Collecting peer rankings...", flush=True)
         stage2_results, label_to_model = await self.stage2_collect_rankings(
             user_query,
             stage1_results,
@@ -364,7 +372,7 @@ class CouncilOrchestrator:
         )
         
         # Stage 3: Chairman synthesis
-        print("Stage 3: Synthesizing final response...")
+        print("Stage 3: Synthesizing final response...", flush=True)
         stage3_result = await self.stage3_synthesize_final(
             user_query,
             stage1_results,
@@ -372,12 +380,14 @@ class CouncilOrchestrator:
             use_code_synthesis=use_worktrees
         )
         
-        # Cleanup worktrees if used
+        # Cleanup worktrees after completion
         if use_worktrees:
+            print("Cleaning up worktrees...", flush=True)
             try:
                 self.worktree_manager.cleanup_all_worktrees()
+                print("  ✓ Cleanup complete", flush=True)
             except Exception as e:
-                print(f"Warning: Failed to cleanup worktrees: {e}")
+                print(f"  ✗ Warning: Failed to cleanup worktrees: {e}")
         
         return {
             "query": user_query,

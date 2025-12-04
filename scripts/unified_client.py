@@ -63,6 +63,8 @@ class UnifiedLLMClient:
         model = member["model"]
         full_name = member["full_name"]
         
+        print(f"  → Querying {full_name}...", flush=True)
+        
         if provider == "openrouter":
             if not self.openrouter_client:
                 print(f"OpenRouter client not initialized (no API key)")
@@ -76,6 +78,9 @@ class UnifiedLLMClient:
             
             if response:
                 response["full_name"] = full_name
+                print(f"  ✓ {full_name} completed", flush=True)
+            else:
+                print(f"  ✗ {full_name} failed", flush=True)
             return response
             
         elif provider == "opencode":
@@ -91,6 +96,9 @@ class UnifiedLLMClient:
             
             if response:
                 response["full_name"] = full_name
+                print(f"  ✓ {full_name} completed", flush=True)
+            else:
+                print(f"  ✗ {full_name} failed", flush=True)
             return response
             
         else:

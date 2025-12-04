@@ -268,7 +268,7 @@ class WorktreeManager:
         return True
     
     def cleanup_all_worktrees(self):
-        """Remove all worktrees and clean up."""
+        """Remove all worktrees, associated branches, and clean up."""
         # List all worktrees
         returncode, stdout, stderr = self._run_git_command(["worktree", "list"])
         
@@ -277,8 +277,10 @@ class WorktreeManager:
             for line in stdout.split('\n'):
                 if line and str(self.worktrees_dir) in line:
                     # Extract path
-                    path = line.split()[0]
+                    parts = line.split()
+                    path = parts[0]
                     member_id = Path(path).name
+                    
                     try:
                         self.remove_worktree(member_id, force=True)
                     except Exception:
@@ -289,3 +291,46 @@ class WorktreeManager:
             for item in self.worktrees_dir.iterdir():
                 if item.is_dir():
                     shutil.rmtree(item, ignore_errors=True)
+        
+        # Prune worktree references
+        self._run_git_command(["worktree", "prune"])
+        
+        # Delete all council/* branches
+        returncode, stdout, stderr = self._run_git_command(["branch", "--list", "council/*"])
+        if returncode == 0 and stdout.strip():
+            for line in stdout.strip().split('\n'):
+                branch = line.strip().lstrip('* ')
+                if branch:
+                    self._run_git_command(["branch", "-D", branch])
+    
+    def prepare_fresh_worktrees(self):
+        """
+        Clean up all existing worktrees and prepare for a fresh start.
+        
+        This should be called at the beginning of each council session
+        to ensure a clean state regardless of previous interruptions.
+        """
+        print("  Preparing fresh worktrees...", flush=True)
+        
+        # Clean up all existing worktrees
+        self.cleanup_all_worktrees()
+        
+        # Sync with parent tree (pull latest changes)
+        self._sync_with_parent()
+        
+        print("  ✓ Worktrees ready", flush=True)
+    
+    def _sync_with_parent(self):
+        """Sync the main repository with any upstream changes."""
+        # Ensure we're on main/master
+        returncode, current_branch, _ = self._run_git_command(
+            ["rev-parse", "--abbrev-ref", "HEAD"]
+        )
+        
+        if returncode == 0:
+            current_branch = current_branch.strip()
+            # If not on main/master, try to switch
+            if current_branch not in ("main", "master"):
+                self._run_git_command(["checkout", "main"])
+                if self._run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])[1].strip() != "main":
+                    self._run_git_command(["checkout", "master"])
