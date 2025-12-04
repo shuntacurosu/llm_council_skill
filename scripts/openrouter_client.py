@@ -85,17 +85,17 @@ class OpenRouterClient:
         models: List[str],
         messages: List[Dict[str, str]],
         system_prompts: Optional[Dict[str, str]] = None
-    ) -> Dict[str, Optional[Dict[str, Any]]]:
+    ) -> List[Dict[str, Any]]:
         """
         Query multiple models in parallel.
         
         Args:
-            models: List of OpenRouter model identifiers
+            models: List of OpenRouter model identifiers (can have duplicates)
             messages: List of message dicts to send to each model
             system_prompts: Optional dict mapping model to system prompt
             
         Returns:
-            Dict mapping model identifier to response dict (or None if failed)
+            List of dicts with 'model' and response data (preserves order and duplicates)
         """
         # Create tasks for all models
         tasks = []
@@ -106,5 +106,12 @@ class OpenRouterClient:
         # Wait for all to complete
         responses = await asyncio.gather(*tasks)
         
-        # Map models to their responses
-        return {model: response for model, response in zip(models, responses)}
+        # Return as list to preserve duplicates
+        results = []
+        for model, response in zip(models, responses):
+            if response is not None:
+                results.append({
+                    "model": model,
+                    "response": response
+                })
+        return results

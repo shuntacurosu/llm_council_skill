@@ -6,7 +6,7 @@ from typing import List
 from dotenv import load_dotenv
 
 # Get the scripts directory
-SCRIPTS_DIR = Path(__file__).parent.parent
+SCRIPTS_DIR = Path(__file__).parent
 ENV_PATH = SCRIPTS_DIR / ".env"
 
 # Load environment variables

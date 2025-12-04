@@ -55,14 +55,16 @@ class CouncilOrchestrator:
         """
         models = self.config.get_council_models()
         
-        # Prepare worktrees if needed
+        # Prepare worktrees if needed (use index as key to handle duplicate models)
         worktree_paths = {}
         if use_worktrees:
             for i, model in enumerate(models):
-                member_id = f"member_{i}_{model.replace('/', '_')}"
+                # Replace invalid characters for Windows directory names
+                safe_model_name = model.replace('/', '_').replace(':', '_')
+                member_id = f"member_{i}_{safe_model_name}"
                 try:
                     worktree_path = self.worktree_manager.create_worktree(member_id)
-                    worktree_paths[model] = (member_id, worktree_path)
+                    worktree_paths[i] = (member_id, worktree_path)
                 except Exception as e:
                     print(f"Failed to create worktree for {model}: {e}")
         
@@ -74,28 +76,30 @@ class CouncilOrchestrator:
         
         # Format results
         stage1_results = []
-        for model, response in responses.items():
-            if response is not None:
-                result = {
-                    "model": model,
-                    "response": response.get('content', '')
-                }
+        for i, item in enumerate(responses):
+            model = item['model']
+            response = item['response']
+            result = {
+                "model": model,
+                "member_index": i,
+                "response": response.get('content', '')
+            }
+            
+            # Add worktree information if applicable
+            if i in worktree_paths:
+                member_id, worktree_path = worktree_paths[i]
+                result["member_id"] = member_id
+                result["worktree_path"] = str(worktree_path)
                 
-                # Add worktree information if applicable
-                if model in worktree_paths:
-                    member_id, worktree_path = worktree_paths[model]
-                    result["member_id"] = member_id
-                    result["worktree_path"] = str(worktree_path)
-                    
-                    # Get diff if there are changes
-                    try:
-                        diff = self.worktree_manager.get_worktree_diff(member_id)
-                        if diff:
-                            result["diff"] = diff
-                    except Exception as e:
-                        print(f"Failed to get diff for {member_id}: {e}")
-                
-                stage1_results.append(result)
+                # Get diff if there are changes
+                try:
+                    diff = self.worktree_manager.get_worktree_diff(member_id)
+                    if diff:
+                        result["diff"] = diff
+                except Exception as e:
+                    print(f"Failed to get diff for {member_id}: {e}")
+            
+            stage1_results.append(result)
         
         return stage1_results
     
@@ -157,15 +161,16 @@ class CouncilOrchestrator:
         
         # Format results
         stage2_results = []
-        for model, response in responses.items():
-            if response is not None:
-                full_text = response.get('content', '')
-                parsed = self._parse_ranking_from_text(full_text)
-                stage2_results.append({
-                    "model": model,
-                    "ranking": full_text,
-                    "parsed_ranking": parsed
-                })
+        for item in responses:
+            model = item['model']
+            response = item['response']
+            full_text = response.get('content', '')
+            parsed = self._parse_ranking_from_text(full_text)
+            stage2_results.append({
+                "model": model,
+                "ranking": full_text,
+                "parsed_ranking": parsed
+            })
         
         return stage2_results, label_to_model
     
