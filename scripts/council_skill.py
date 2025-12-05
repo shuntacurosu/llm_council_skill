@@ -41,13 +41,18 @@ def run_council(query: str, use_worktrees: bool = False) -> Dict[str, Any]:
     # Run the council
     results = asyncio.run(orchestrator.run_full_council(query, use_worktrees))
     
+    # Generate conversation title
+    logger.info("Generating conversation title...")
+    title = asyncio.run(orchestrator.generate_conversation_title(query))
+    logger.info(f"Title: {title}")
+    
     # Save to conversation history
     config = get_config()
     storage = ConversationStorage(config.conversations_dir)
     
-    # Create or update conversation
+    # Create or update conversation with generated title
     conversation_id = str(uuid.uuid4())
-    storage.add_session(conversation_id, query, results)
+    storage.add_session(conversation_id, query, results, title=title)
     
     return results
 

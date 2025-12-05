@@ -101,6 +101,19 @@ class Config:
         if self.chairman["provider"] == "openrouter" and not self.openrouter_api_key:
             raise ValueError("OPENROUTER_API_KEY required when using openrouter provider for chairman")
         
+        # Title generation model (optional, defaults to chairman model)
+        title_model_str = os.getenv("TITLE_MODEL", chairman_model_str)
+        title_provider, title_model = parse_provider_model(title_model_str)
+        self.title_model = {
+            "provider": title_provider,
+            "model": title_model,
+            "full_name": title_model_str
+        }
+        
+        # Validate API key for title model
+        if self.title_model["provider"] == "openrouter" and not self.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY required when using openrouter provider for title generation")
+        
         # OpenRouter API endpoint
         self.openrouter_api_url = "https://openrouter.ai/api/v1/chat/completions"
     
@@ -124,6 +137,10 @@ class Config:
     def get_chairman_model(self) -> str:
         """Get the chairman model full name (for backward compatibility)."""
         return self.chairman["full_name"]
+    
+    def get_title_model(self) -> dict:
+        """Get the title generation model with provider info."""
+        return self.title_model.copy()
 
 
 # Global config instance

@@ -81,7 +81,8 @@ class ConversationStorage:
         self,
         conversation_id: str,
         user_query: str,
-        council_results: Dict[str, Any]
+        council_results: Dict[str, Any],
+        title: Optional[str] = None
     ):
         """
         Add a council session to a conversation.
@@ -90,11 +91,19 @@ class ConversationStorage:
             conversation_id: Unique identifier for the conversation
             user_query: The user's query
             council_results: Results from the council process
+            title: Optional title for the conversation (auto-generated or user-provided)
         """
         conversation = self.get_conversation(conversation_id)
         
         if conversation is None:
-            conversation = self.create_conversation(conversation_id)
+            # Use provided title or default
+            conversation = self.create_conversation(
+                conversation_id, 
+                title=title or "New Council Session"
+            )
+        elif title:
+            # Update title if provided and this is an existing conversation
+            conversation["title"] = title
         
         session = {
             "timestamp": datetime.utcnow().isoformat(),

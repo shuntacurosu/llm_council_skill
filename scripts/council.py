@@ -407,3 +407,50 @@ class CouncilOrchestrator:
             "aggregate_rankings": aggregate_rankings,
             "label_to_model": label_to_model
         }
+    
+    async def generate_conversation_title(self, user_query: str) -> str:
+        """
+        Generate a short title for a conversation based on the first user message.
+        
+        Args:
+            user_query: The first user message
+            
+        Returns:
+            A short title (3-5 words)
+        """
+        title_prompt = """Generate a very short title (3-5 words maximum) that summarizes the following question.
+The title should be concise and descriptive. Do not use quotes or punctuation in the title.
+Respond with ONLY the title, nothing else.
+
+Question: {query}
+
+Title:""".format(query=user_query)
+        
+        messages = [{"role": "user", "content": title_prompt}]
+        
+        # Use the configured title model
+        title_model = self.config.get_title_model()
+        
+        try:
+            response = await self.client.query_member(title_model, messages)
+            
+            if response is None:
+                return "New Conversation"
+            
+            title = response.get('content', 'New Conversation').strip()
+            
+            # Clean up the title - remove quotes, limit length
+            title = title.strip('"\'')
+            
+            # Remove any leading/trailing punctuation
+            title = title.strip('.,!?:;')
+            
+            # Truncate if too long
+            if len(title) > 50:
+                title = title[:47] + "..."
+            
+            return title if title else "New Conversation"
+            
+        except Exception as e:
+            logger.warning(f"Failed to generate title: {e}")
+            return "New Conversation"
