@@ -50,11 +50,16 @@ class Config:
     
     def __init__(self):
         self.scripts_dir = SCRIPTS_DIR
-        self.conversations_dir = SCRIPTS_DIR / "conversations"
-        self.prompts_dir = SCRIPTS_DIR / "prompts"
+        
+        # Data directory structure (for dashboard integration)
+        self.data_dir = SCRIPTS_DIR / "data"
+        self.logs_dir = self.data_dir / "logs"
+        self.conversations_dir = self.data_dir / "conversations"
         self.worktrees_dir = SCRIPTS_DIR / "worktrees"
         
         # Ensure directories exist
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
         self.conversations_dir.mkdir(parents=True, exist_ok=True)
         self.worktrees_dir.mkdir(parents=True, exist_ok=True)
         

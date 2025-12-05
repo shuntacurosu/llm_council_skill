@@ -7,9 +7,10 @@ from loguru import logger
 # Remove default handler
 logger.remove()
 
-# Get logs directory
+# Get data directory (centralized for dashboard integration)
 SCRIPTS_DIR = Path(__file__).parent
-LOGS_DIR = SCRIPTS_DIR / "logs"
+DATA_DIR = SCRIPTS_DIR / "data"
+LOGS_DIR = DATA_DIR / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 MEMBER_LOGS_DIR = LOGS_DIR / "members"
 MEMBER_LOGS_DIR.mkdir(parents=True, exist_ok=True)

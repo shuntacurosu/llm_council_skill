@@ -9,11 +9,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Conversations
-scripts/conversations/*.json
+# Conversations,Logs
+scripts/data/conversations/
+scripts/data/logs/
 
 # Worktrees
 scripts/worktrees/
-
-# Logs
-scripts/logs/

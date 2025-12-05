@@ -1,8 +1,0 @@
-# Environment variables
-.env
-
-# Conversations
-conversations/*.json
-
-# Worktrees directory (managed by git worktree)
-worktrees/
