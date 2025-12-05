@@ -1,11 +1,18 @@
 """Test file for worktree merge scenario."""
 
 
-def divide(a, b):
-    """Divide a by b - has potential zero division error."""
-    return a / b  # ゼロ除算エラーの可能性
+def divide(a: float, b: float) -> float | None:
+    """Divide a by b safely.
+
+    Returns None if division by zero occurs.
+    Other exceptions are propagated normally.
+    """
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return None
 
 
-def calculate(x):
+def calculate(x: int | float) -> int | float:
     """Simple calculation function."""
     return x * 2
