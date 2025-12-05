@@ -509,32 +509,36 @@ class CouncilOrchestrator:
         elif merge_mode == "auto":
             # Find top-ranked member with a diff
             if not aggregate_rankings:
-                return {"status": "error", "message": "No rankings available"}
-            
-            # Get top-ranked label
-            top_label = aggregate_rankings[0][0]  # e.g., "Response A"
-            top_model = label_to_model.get(top_label)
-            
-            if not top_model:
-                return {"status": "error", "message": f"Could not find model for {top_label}"}
-            
-            # Find the member with this model that has a diff
-            matching = [r for r in members_with_diffs if r['model'] == top_model]
-            
-            if not matching:
-                # Top-ranked member has no changes, try next
-                logger.warning(f"Top-ranked {top_model} has no code changes")
-                for label, score in aggregate_rankings[1:]:
-                    model = label_to_model.get(label)
-                    matching = [r for r in members_with_diffs if r['model'] == model]
-                    if matching:
-                        logger.info(f"Using next ranked member with changes: {model}")
-                        break
-            
-            if not matching:
-                return {"status": "error", "message": "No ranked member has code changes"}
-            
-            target_member = matching[0]
+                # Fallback: use first member with diff if no rankings available
+                logger.warning("No rankings available, using first member with diff")
+                target_member = members_with_diffs[0]
+            else:
+                # Get top-ranked label
+                top_label = aggregate_rankings[0][0]  # e.g., "Response A"
+                top_model = label_to_model.get(top_label)
+                
+                if not top_model:
+                    return {"status": "error", "message": f"Could not find model for {top_label}"}
+                
+                # Find the member with this model that has a diff
+                matching = [r for r in members_with_diffs if r['model'] == top_model]
+                
+                if not matching:
+                    # Top-ranked member has no changes, try next
+                    logger.warning(f"Top-ranked {top_model} has no code changes")
+                    for label, score in aggregate_rankings[1:]:
+                        model = label_to_model.get(label)
+                        matching = [r for r in members_with_diffs if r['model'] == model]
+                        if matching:
+                            logger.info(f"Using next ranked member with changes: {model}")
+                            break
+                
+                if not matching:
+                    # Fallback to first member with diff
+                    logger.warning("No ranked member has code changes, using first available")
+                    target_member = members_with_diffs[0]
+                else:
+                    target_member = matching[0]
         
         if target_member is None:
             return {"status": "error", "message": "No target member found for merge"}
