@@ -27,7 +27,8 @@ def run_council(
     conversation_id: Optional[str] = None,
     merge_mode: Optional[str] = None,
     merge_member: Optional[int] = None,
-    confirm_merge: bool = False
+    confirm_merge: bool = False,
+    no_commit: bool = False
 ) -> Dict[str, Any]:
     """
     Run the LLM Council on a query.
@@ -39,6 +40,7 @@ def run_council(
         merge_mode: Merge mode - None, "auto", "manual", or "dry-run"
         merge_member: Member index to merge (1-based, for manual mode)
         confirm_merge: Whether to ask for confirmation before merging
+        no_commit: Apply changes without committing (leaves changes as unstaged)
         
     Returns:
         Council results with all stages
@@ -66,7 +68,8 @@ def run_council(
         context_messages=context_messages,
         merge_mode=merge_mode,
         merge_member=merge_member,
-        confirm_merge=confirm_merge
+        confirm_merge=confirm_merge,
+        no_commit=no_commit
     ))
     
     # Generate title only for new conversations
@@ -183,6 +186,10 @@ def format_results(results: Dict[str, Any]) -> str:
         status = merge_result.get('status', 'unknown')
         if status == 'merged':
             output.append(f"\n✓ Successfully merged changes from {merge_result.get('member', 'Unknown')}")
+        elif status == 'applied':
+            output.append(f"\n✓ Applied changes from {merge_result.get('member', 'Unknown')} (unstaged)")
+            output.append("  Use 'git status' and 'git diff' to review")
+            output.append("  Commit manually when ready")
         elif status == 'dry_run':
             output.append(f"\n(Dry run) {merge_result.get('members_with_diffs', 0)} members had code changes")
         elif status == 'cancelled':
@@ -221,6 +228,8 @@ def main():
                              help="Show diffs without merging (implies --worktrees)")
     parser.add_argument("--confirm", action="store_true",
                         help="Ask for confirmation before merging")
+    parser.add_argument("--no-commit", action="store_true",
+                        help="Apply changes without committing (leaves changes as unstaged)")
     
     args = parser.parse_args()
     
@@ -348,6 +357,9 @@ For more information, see README.md
         logger.error("Error: Merge options require --worktrees or are implied by merge options")
         return
     
+    # no_commit option
+    no_commit = getattr(args, 'no_commit', False)
+    
     try:
         logger.info("Running LLM Council...")
         logger.info("This may take a minute as multiple models are queried in parallel.\n")
@@ -358,7 +370,8 @@ For more information, see README.md
             conversation_id=conversation_id,
             merge_mode=merge_mode,
             merge_member=merge_member,
-            confirm_merge=args.confirm
+            confirm_merge=args.confirm,
+            no_commit=no_commit
         )
         
         formatted = format_results(results)

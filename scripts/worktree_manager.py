@@ -212,7 +212,7 @@ class WorktreeManager:
     
     def apply_changes_to_main(self, member_id: str, strategy: str = "merge") -> bool:
         """
-        Apply changes from a worktree to the main branch.
+        Apply changes from a worktree to the main branch with commit.
         
         Args:
             member_id: Unique identifier for the council member
@@ -267,6 +267,134 @@ class WorktreeManager:
         if returncode != 0:
             raise RuntimeError(f"Failed to apply changes: {stderr}")
         
+        return True
+    
+    def apply_changes_without_commit(self, member_id: str) -> bool:
+        """
+        Apply changes from a worktree to the main working directory WITHOUT committing.
+        
+        This copies the file changes from the worktree to the main repository,
+        leaving them as unstaged changes that can be reviewed and committed manually.
+        Git-traceable: the changes will show up in `git status` and `git diff`.
+        
+        Args:
+            member_id: Unique identifier for the council member
+            
+        Returns:
+            True if successful
+        """
+        worktree_path = self.worktrees_dir / member_id
+        
+        if not worktree_path.exists():
+            raise ValueError(f"Worktree for {member_id} does not exist")
+        
+        # Get the diff from worktree
+        diff = self.get_worktree_diff(member_id)
+        
+        if not diff:
+            logger.info(f"No changes to apply from {member_id}")
+            return False
+        
+        # Apply the diff to main repository using git apply
+        # This applies the patch without committing
+        returncode, stdout, stderr = self._run_git_command(
+            ["apply", "--3way", "-"],
+            cwd=self.repo_root
+        )
+        
+        if returncode != 0:
+            # Try without 3-way merge
+            import subprocess
+            result = subprocess.run(
+                ["git", "apply", "-"],
+                cwd=str(self.repo_root),
+                input=diff,
+                capture_output=True,
+                text=True,
+                encoding='utf-8'
+            )
+            
+            if result.returncode != 0:
+                # If patch fails, try copying files directly
+                logger.warning(f"git apply failed: {result.stderr}, trying direct file copy")
+                return self._copy_changed_files(member_id)
+        
+        # Need to pass the diff via stdin
+        import subprocess
+        result = subprocess.run(
+            ["git", "apply", "--3way"],
+            cwd=str(self.repo_root),
+            input=diff,
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode != 0:
+            # Try without 3-way
+            result = subprocess.run(
+                ["git", "apply"],
+                cwd=str(self.repo_root),
+                input=diff,
+                capture_output=True,
+                text=True,
+                encoding='utf-8'
+            )
+            
+            if result.returncode != 0:
+                # If patch still fails, try copying files directly
+                logger.warning(f"git apply failed: {result.stderr}, trying direct file copy")
+                return self._copy_changed_files(member_id)
+        
+        logger.success(f"Applied changes from {member_id} (unstaged)")
+        return True
+    
+    def _copy_changed_files(self, member_id: str) -> bool:
+        """
+        Copy changed files from worktree to main repository.
+        
+        Fallback method when git apply fails.
+        
+        Args:
+            member_id: Unique identifier for the council member
+            
+        Returns:
+            True if successful
+        """
+        worktree_path = self.worktrees_dir / member_id
+        
+        # Get list of changed files
+        returncode, stdout, stderr = self._run_git_command(
+            ["diff", "--name-only", "HEAD"],
+            cwd=worktree_path
+        )
+        
+        if returncode != 0:
+            raise RuntimeError(f"Failed to get changed files: {stderr}")
+        
+        changed_files = [f.strip() for f in stdout.strip().split('\n') if f.strip()]
+        
+        if not changed_files:
+            return False
+        
+        # Copy each changed file
+        for file_path in changed_files:
+            src = worktree_path / file_path
+            dst = self.repo_root / file_path
+            
+            if src.exists():
+                # Ensure parent directory exists
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                # Copy file content
+                shutil.copy2(src, dst)
+                logger.info(f"  Copied: {file_path}")
+            else:
+                # File was deleted
+                if dst.exists():
+                    dst.unlink()
+                    logger.info(f"  Deleted: {file_path}")
+        
+        logger.success(f"Copied {len(changed_files)} changed file(s) from {member_id}")
         return True
     
     def cleanup_all_worktrees(self):

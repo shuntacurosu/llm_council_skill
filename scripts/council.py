@@ -261,32 +261,88 @@ class CouncilOrchestrator:
         """
         Parse the FINAL RANKING section from the model's response.
         
+        Handles various formats:
+        - "FINAL RANKING:\n1. Response A\n2. Response B"
+        - "1. A\n2. B" 
+        - "A > B > C"
+        - "Best: A, Second: B"
+        - Just letters: "A, B, C" or "A B C"
+        
         Args:
             ranking_text: The full text response from the model
             
         Returns:
-            List of response labels in ranked order
+            List of response labels in ranked order (e.g., ["Response A", "Response B"])
         """
-        # Look for "FINAL RANKING:" section
-        if "FINAL RANKING:" in ranking_text:
-            # Extract everything after "FINAL RANKING:"
-            parts = ranking_text.split("FINAL RANKING:")
-            if len(parts) >= 2:
-                ranking_section = parts[1]
-                
-                # Try to extract numbered list format (e.g., "1. Response A")
-                numbered_matches = re.findall(
-                    r'\d+\.\s*(?:Response|Proposal)\s+[A-Z]',
-                    ranking_section
-                )
-                if numbered_matches:
-                    # Extract just the "Response X" or "Proposal X" part
-                    return [
-                        re.search(r'(?:Response|Proposal)\s+[A-Z]', m).group()
-                        for m in numbered_matches
-                    ]
+        result = []
         
-        # Fallback: couldn't parse ranking
+        # Normalize text for easier parsing
+        text = ranking_text.upper()
+        
+        # Strategy 1: Look for "FINAL RANKING:" section
+        ranking_section = ""
+        for marker in ["FINAL RANKING:", "FINAL RANKING", "RANKING:", "MY RANKING:"]:
+            if marker in text:
+                parts = text.split(marker, 1)
+                if len(parts) >= 2:
+                    # Take next 500 chars or until next section
+                    ranking_section = parts[1][:500]
+                    break
+        
+        if not ranking_section:
+            # Try to find ranking anywhere in text
+            ranking_section = text
+        
+        # Strategy 2: Try numbered list format ("1. Response A", "1. Proposal A", "1. A")
+        numbered_matches = re.findall(
+            r'(\d+)[\.)\s]+(?:RESPONSE|PROPOSAL)?\s*([A-Z])(?:\s|$|\n|,|\.|>)',
+            ranking_section
+        )
+        if numbered_matches:
+            # Sort by number and extract letters
+            sorted_matches = sorted(numbered_matches, key=lambda x: int(x[0]))
+            result = [f"Response {letter}" for _, letter in sorted_matches]
+            if result:
+                return result
+        
+        # Strategy 3: Look for comparison format ("A > B > C" or "A, B, C")
+        comparison_match = re.search(
+            r'([A-Z])\s*[>,]\s*([A-Z])(?:\s*[>,]\s*([A-Z]))?(?:\s*[>,]\s*([A-Z]))?',
+            ranking_section
+        )
+        if comparison_match:
+            letters = [g for g in comparison_match.groups() if g]
+            result = [f"Response {letter}" for letter in letters]
+            if result:
+                return result
+        
+        # Strategy 4: Look for ordinal format ("Best: A", "First: A", "1st: A")
+        ordinal_matches = re.findall(
+            r'(?:BEST|FIRST|1ST|SECOND|2ND|THIRD|3RD|\d+(?:ST|ND|RD|TH))[:\s]+(?:RESPONSE|PROPOSAL)?\s*([A-Z])',
+            ranking_section
+        )
+        if ordinal_matches:
+            result = [f"Response {letter}" for letter in ordinal_matches]
+            if result:
+                return result
+        
+        # Strategy 5: Just look for single letters in order (last resort)
+        # Only in the ranking section, find standalone A, B, C
+        if ranking_section:
+            letter_matches = re.findall(r'(?:^|\s|\n)([A-C])(?:\s|$|\n|,|\.)', ranking_section[:200])
+            if letter_matches and len(letter_matches) >= 2:
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_letters = []
+                for letter in letter_matches:
+                    if letter not in seen:
+                        seen.add(letter)
+                        unique_letters.append(letter)
+                result = [f"Response {letter}" for letter in unique_letters]
+                if result:
+                    return result
+        
+        # Failed to parse
         return []
     
     def calculate_aggregate_rankings(
@@ -337,7 +393,8 @@ class CouncilOrchestrator:
         context_messages: List[Dict[str, str]] = None,
         merge_mode: Optional[str] = None,
         merge_member: Optional[int] = None,
-        confirm_merge: bool = False
+        confirm_merge: bool = False,
+        no_commit: bool = False
     ) -> Dict[str, Any]:
         """
         Run the complete 3-stage council process.
@@ -349,6 +406,7 @@ class CouncilOrchestrator:
             merge_mode: Merge mode - None, "auto", "manual", or "dry-run"
             merge_member: Member index to merge (1-based, for manual mode)
             confirm_merge: Whether to ask for confirmation before merging
+            no_commit: Apply changes without committing (leaves changes as unstaged)
             
         Returns:
             Complete council results with all stages
@@ -421,7 +479,8 @@ class CouncilOrchestrator:
                 label_to_model=label_to_model,
                 merge_mode=merge_mode,
                 merge_member=merge_member,
-                confirm_merge=confirm_merge
+                confirm_merge=confirm_merge,
+                no_commit=no_commit
             )
         
         # Cleanup worktrees after completion (unless dry-run keeps them for inspection)
@@ -450,7 +509,8 @@ class CouncilOrchestrator:
         label_to_model: Dict[str, str],
         merge_mode: str,
         merge_member: Optional[int] = None,
-        confirm_merge: bool = False
+        confirm_merge: bool = False,
+        no_commit: bool = False
     ) -> Dict[str, Any]:
         """
         Handle the merge of worktree changes based on the specified mode.
@@ -462,6 +522,7 @@ class CouncilOrchestrator:
             merge_mode: "auto", "manual", or "dry-run"
             merge_member: Member index for manual mode (1-based)
             confirm_merge: Whether to ask for confirmation
+            no_commit: Apply changes without committing (leaves changes as unstaged)
             
         Returns:
             Dict with merge status and details
@@ -509,36 +570,42 @@ class CouncilOrchestrator:
         elif merge_mode == "auto":
             # Find top-ranked member with a diff
             if not aggregate_rankings:
-                # Fallback: use first member with diff if no rankings available
-                logger.warning("No rankings available, using first member with diff")
-                target_member = members_with_diffs[0]
-            else:
-                # Get top-ranked label
-                top_label = aggregate_rankings[0][0]  # e.g., "Response A"
-                top_model = label_to_model.get(top_label)
-                
-                if not top_model:
-                    return {"status": "error", "message": f"Could not find model for {top_label}"}
-                
-                # Find the member with this model that has a diff
-                matching = [r for r in members_with_diffs if r['model'] == top_model]
-                
-                if not matching:
-                    # Top-ranked member has no changes, try next
-                    logger.warning(f"Top-ranked {top_model} has no code changes")
-                    for label, score in aggregate_rankings[1:]:
-                        model = label_to_model.get(label)
-                        matching = [r for r in members_with_diffs if r['model'] == model]
-                        if matching:
-                            logger.info(f"Using next ranked member with changes: {model}")
-                            break
-                
-                if not matching:
-                    # Fallback to first member with diff
-                    logger.warning("No ranked member has code changes, using first available")
-                    target_member = members_with_diffs[0]
-                else:
-                    target_member = matching[0]
+                # No fallback - ranking is required for auto merge
+                logger.error("Auto-merge failed: No valid rankings from Stage 2")
+                return {
+                    "status": "error", 
+                    "message": "Auto-merge requires valid rankings from Stage 2. All ranking parsers failed."
+                }
+            
+            # Get top-ranked label
+            top_label = aggregate_rankings[0][0]  # e.g., "Response A"
+            top_model = label_to_model.get(top_label)
+            
+            if not top_model:
+                return {"status": "error", "message": f"Could not find model for {top_label}"}
+            
+            # Find the member with this model that has a diff
+            matching = [r for r in members_with_diffs if r['model'] == top_model]
+            
+            if not matching:
+                # Top-ranked member has no changes, try next ranked members
+                logger.warning(f"Top-ranked {top_model} has no code changes")
+                for label, score in aggregate_rankings[1:]:
+                    model = label_to_model.get(label)
+                    matching = [r for r in members_with_diffs if r['model'] == model]
+                    if matching:
+                        logger.info(f"Using next ranked member with changes: {model}")
+                        break
+            
+            if not matching:
+                # No ranked member has changes - this is an error
+                logger.error("No ranked member has code changes")
+                return {
+                    "status": "error",
+                    "message": "None of the ranked members produced code changes"
+                }
+            
+            target_member = matching[0]
         
         if target_member is None:
             return {"status": "error", "message": "No target member found for merge"}
@@ -546,6 +613,8 @@ class CouncilOrchestrator:
         # Show diff and optionally confirm
         logger.info("\n" + "=" * 80)
         logger.info(f"MERGE TARGET: {target_member['model']}")
+        if no_commit:
+            logger.info("(--no-commit: changes will be applied as unstaged)")
         logger.info("=" * 80)
         diff = target_member['diff']
         logger.info(diff[:3000] if len(diff) > 3000 else diff)
@@ -562,27 +631,47 @@ class CouncilOrchestrator:
         # Perform the merge
         member_id = target_member['member_id']
         try:
-            # First commit the changes in the worktree
-            logger.info(f"Committing changes in worktree for {member_id}...")
-            committed = self.worktree_manager.commit_changes(
-                member_id, 
-                f"Council proposal from {target_member['model']}"
-            )
-            
-            if not committed:
-                return {"status": "error", "message": "Nothing to commit"}
-            
-            # Apply changes to main
-            logger.info("Applying changes to main branch...")
-            self.worktree_manager.apply_changes_to_main(member_id, strategy="merge")
-            
-            logger.success(f"  ✓ Successfully merged changes from {target_member['model']}")
-            
-            return {
-                "status": "merged",
-                "member": target_member['model'],
-                "member_id": member_id
-            }
+            if no_commit:
+                # Apply changes without committing (as unstaged changes)
+                logger.info(f"Applying changes from {member_id} (without commit)...")
+                applied = self.worktree_manager.apply_changes_without_commit(member_id)
+                
+                if not applied:
+                    return {"status": "error", "message": "No changes to apply"}
+                
+                logger.success(f"  ✓ Applied changes from {target_member['model']} (unstaged)")
+                logger.info("  Use 'git status' and 'git diff' to review changes")
+                logger.info("  Commit manually when ready: git add -A && git commit -m 'your message'")
+                
+                return {
+                    "status": "applied",
+                    "member": target_member['model'],
+                    "member_id": member_id,
+                    "no_commit": True
+                }
+            else:
+                # Original behavior: commit and merge
+                # First commit the changes in the worktree
+                logger.info(f"Committing changes in worktree for {member_id}...")
+                committed = self.worktree_manager.commit_changes(
+                    member_id, 
+                    f"Council proposal from {target_member['model']}"
+                )
+                
+                if not committed:
+                    return {"status": "error", "message": "Nothing to commit"}
+                
+                # Apply changes to main
+                logger.info("Applying changes to main branch...")
+                self.worktree_manager.apply_changes_to_main(member_id, strategy="merge")
+                
+                logger.success(f"  ✓ Successfully merged changes from {target_member['model']}")
+                
+                return {
+                    "status": "merged",
+                    "member": target_member['model'],
+                    "member_id": member_id
+                }
             
         except Exception as e:
             logger.error(f"  ✗ Merge failed: {e}")
