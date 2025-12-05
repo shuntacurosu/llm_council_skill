@@ -24,7 +24,10 @@ from storage import ConversationStorage
 def run_council(
     query: str, 
     use_worktrees: bool = False,
-    conversation_id: Optional[str] = None
+    conversation_id: Optional[str] = None,
+    merge_mode: Optional[str] = None,
+    merge_member: Optional[int] = None,
+    confirm_merge: bool = False
 ) -> Dict[str, Any]:
     """
     Run the LLM Council on a query.
@@ -33,6 +36,9 @@ def run_council(
         query: The user's question or request
         use_worktrees: Whether to use git worktrees for code work
         conversation_id: Optional existing conversation ID to continue
+        merge_mode: Merge mode - None, "auto", "manual", or "dry-run"
+        merge_member: Member index to merge (1-based, for manual mode)
+        confirm_merge: Whether to ask for confirmation before merging
         
     Returns:
         Council results with all stages
@@ -57,7 +63,10 @@ def run_council(
     results = asyncio.run(orchestrator.run_full_council(
         query, 
         use_worktrees,
-        context_messages=context_messages
+        context_messages=context_messages,
+        merge_mode=merge_mode,
+        merge_member=merge_member,
+        confirm_merge=confirm_merge
     ))
     
     # Generate title only for new conversations
@@ -164,6 +173,26 @@ def format_results(results: Dict[str, Any]) -> str:
         output.append("\nNo synthesis available (council did not return responses)")
     output.append("")
     
+    # Merge Result (if applicable)
+    merge_result = results.get('merge_result')
+    if merge_result:
+        output.append("-" * 80)
+        output.append("MERGE RESULT")
+        output.append("-" * 80)
+        
+        status = merge_result.get('status', 'unknown')
+        if status == 'merged':
+            output.append(f"\n✓ Successfully merged changes from {merge_result.get('member', 'Unknown')}")
+        elif status == 'dry_run':
+            output.append(f"\n(Dry run) {merge_result.get('members_with_diffs', 0)} members had code changes")
+        elif status == 'cancelled':
+            output.append("\n✗ Merge cancelled by user")
+        elif status == 'no_changes':
+            output.append("\n(No code changes to merge)")
+        elif status == 'error':
+            output.append(f"\n✗ Merge error: {merge_result.get('message', 'Unknown error')}")
+        output.append("")
+    
     output.append("=" * 80)
     
     return "\n".join(output)
@@ -182,6 +211,17 @@ def main():
                         help="Continue conversation N with a new query")
     parser.add_argument("--setup", action="store_true", help="Show setup instructions")
     
+    # Merge options (require --worktrees)
+    merge_group = parser.add_mutually_exclusive_group()
+    merge_group.add_argument("--auto-merge", action="store_true",
+                             help="Automatically merge the top-ranked proposal")
+    merge_group.add_argument("--merge", type=int, metavar="N",
+                             help="Merge proposal from member N (1-based index)")
+    merge_group.add_argument("--dry-run", action="store_true",
+                             help="Show diffs without merging (implies --worktrees)")
+    parser.add_argument("--confirm", action="store_true",
+                        help="Ask for confirmation before merging")
+    
     args = parser.parse_args()
     
     if args.setup:
@@ -192,20 +232,20 @@ LLM Council Setup Instructions:
    cd scripts
    cp .env.example .env
 
-2. Edit .env and add your OpenRouter API key:
-   OPENROUTER_API_KEY=sk-or-v1-your-api-key-here
+2. Configure council members and chairman model in .env:
+   COUNCIL_MODELS=opencode/openai/gpt-4,opencode/anthropic/claude-3-5-sonnet-20241022,...
+   CHAIRMAN_MODEL=opencode/anthropic/claude-3-5-sonnet-20241022
+   
+   Note: All models use OpenCode CLI. Format is opencode/provider/model
+   You can also omit 'opencode/' prefix as it's the default.
 
-3. Configure council members and chairman model in .env:
-   COUNCIL_MODELS=openai/gpt-4,anthropic/claude-3-5-sonnet-20241022,...
-   CHAIRMAN_MODEL=anthropic/claude-3-5-sonnet-20241022
+3. Install dependencies:
+   pip install python-dotenv loguru
 
-4. Install dependencies:
-   pip install httpx python-dotenv loguru
-
-5. Run the council:
+4. Run the council:
    python council_skill.py "Your query here"
 
-6. Continue a conversation:
+5. Continue a conversation:
    python council_skill.py --list
    python council_skill.py --continue 1 "Follow-up question"
 
@@ -287,14 +327,38 @@ For more information, see README.md
         parser.print_help()
         return
     
+    # Determine merge mode
+    merge_mode = None
+    merge_member = None
+    use_worktrees = args.worktrees
+    
+    if args.auto_merge:
+        merge_mode = "auto"
+        use_worktrees = True  # Auto-merge implies worktrees
+    elif args.merge:
+        merge_mode = "manual"
+        merge_member = args.merge
+        use_worktrees = True
+    elif args.dry_run:
+        merge_mode = "dry-run"
+        use_worktrees = True
+    
+    # Validate merge options
+    if (args.auto_merge or args.merge or args.confirm) and not use_worktrees:
+        logger.error("Error: Merge options require --worktrees or are implied by merge options")
+        return
+    
     try:
         logger.info("Running LLM Council...")
         logger.info("This may take a minute as multiple models are queried in parallel.\n")
         
         results = run_council(
             args.query, 
-            use_worktrees=args.worktrees,
-            conversation_id=conversation_id
+            use_worktrees=use_worktrees,
+            conversation_id=conversation_id,
+            merge_mode=merge_mode,
+            merge_member=merge_member,
+            confirm_merge=args.confirm
         )
         
         formatted = format_results(results)

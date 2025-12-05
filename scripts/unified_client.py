@@ -1,44 +1,34 @@
-"""Unified LLM client that routes to appropriate providers."""
+"""Unified LLM client - OpenCode CLI only."""
 
 import asyncio
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 from logger import logger, get_member_logger
-from openrouter_client import OpenRouterClient
 from opencode_client import OpenCodeClient
 
 
 class UnifiedLLMClient:
     """
-    Unified client that routes requests to the appropriate LLM provider.
+    Unified client that routes requests to OpenCode CLI.
     
     Supports:
-        - openrouter: OpenRouter API
-        - opencode: OpenCode CLI
+        - opencode: OpenCode CLI (primary and only provider)
+    
+    Note:
+        Future support for other CLIs (claude-code, codex) may be added.
     """
     
     def __init__(
         self,
-        openrouter_api_key: Optional[str] = None,
-        openrouter_api_url: str = "https://openrouter.ai/api/v1/chat/completions",
         working_dir: Optional[Path] = None
     ):
         """
         Initialize the unified client.
         
         Args:
-            openrouter_api_key: API key for OpenRouter
-            openrouter_api_url: OpenRouter API endpoint
             working_dir: Working directory for OpenCode
         """
-        self.openrouter_client = None
-        if openrouter_api_key:
-            self.openrouter_client = OpenRouterClient(
-                api_key=openrouter_api_key,
-                api_url=openrouter_api_url
-            )
-        
         self.opencode_client = OpenCodeClient(working_dir=working_dir)
     
     async def query_member(
@@ -49,11 +39,11 @@ class UnifiedLLMClient:
         timeout: float = 300.0
     ) -> Optional[Dict[str, Any]]:
         """
-        Query a council member based on their provider.
+        Query a council member using OpenCode CLI.
         
         Args:
             member: Dict with 'provider', 'model', 'full_name' keys
-            messages: List of message dicts (for OpenRouter format)
+            messages: List of message dicts
             working_dir: Working directory for OpenCode
             timeout: Request timeout
             
@@ -72,52 +62,30 @@ class UnifiedLLMClient:
         member_logger.info(f"Starting query for {full_name}")
         member_logger.debug(f"Provider: {provider}, Model: {model}")
         
-        if provider == "openrouter":
-            if not self.openrouter_client:
-                logger.error(f"OpenRouter client not initialized (no API key)")
-                member_logger.error("OpenRouter client not initialized")
-                return None
-            
-            response = await self.openrouter_client.query_model(
-                model=model,
-                messages=messages,
-                timeout=timeout
-            )
-            
-            if response:
-                response["full_name"] = full_name
-                logger.success(f"  ✓ {full_name} completed")
-                member_logger.success(f"Query completed successfully")
-                member_logger.debug(f"Response length: {len(response.get('content', ''))} chars")
-            else:
-                logger.warning(f"  ✗ {full_name} failed")
-                member_logger.error("Query failed - no response")
-            return response
-            
-        elif provider == "opencode":
-            # Convert messages to a single prompt for OpenCode
-            prompt = self._messages_to_prompt(messages)
-            
-            response = await self.opencode_client.query_model(
-                model=model,
-                prompt=prompt,
-                working_dir=working_dir,
-                timeout=timeout
-            )
-            
-            if response:
-                response["full_name"] = full_name
-                logger.success(f"  ✓ {full_name} completed")
-                member_logger.success(f"Query completed successfully")
-                member_logger.debug(f"Response length: {len(response.get('content', ''))} chars")
-            else:
-                logger.warning(f"  ✗ {full_name} failed")
-                member_logger.error("Query failed - no response")
-            return response
-            
-        else:
-            logger.error(f"Unknown provider: {provider}")
+        if provider != "opencode":
+            logger.error(f"Unknown provider: {provider}. Only 'opencode' is supported.")
+            member_logger.error(f"Unknown provider: {provider}")
             return None
+        
+        # Convert messages to a single prompt for OpenCode
+        prompt = self._messages_to_prompt(messages)
+        
+        response = await self.opencode_client.query_model(
+            model=model,
+            prompt=prompt,
+            working_dir=working_dir,
+            timeout=timeout
+        )
+        
+        if response:
+            response["full_name"] = full_name
+            logger.success(f"  ✓ {full_name} completed")
+            member_logger.success(f"Query completed successfully")
+            member_logger.debug(f"Response length: {len(response.get('content', ''))} chars")
+        else:
+            logger.warning(f"  ✗ {full_name} failed")
+            member_logger.error("Query failed - no response")
+        return response
     
     def _messages_to_prompt(self, messages: List[Dict[str, str]]) -> str:
         """Convert OpenAI-style messages to a single prompt string."""

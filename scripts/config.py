@@ -19,9 +19,11 @@ def parse_provider_model(full_model: str) -> Tuple[str, str]:
     
     Format: provider/model_path
     Examples:
-        - openrouter/openai/gpt-4 -> ("openrouter", "openai/gpt-4")
         - opencode/anthropic/claude-3 -> ("opencode", "anthropic/claude-3")
-        - openai/gpt-4 -> ("openrouter", "openai/gpt-4")  # default to openrouter
+        - anthropic/claude-3 -> ("opencode", "anthropic/claude-3")  # default to opencode
+    
+    Note:
+        Future support for other CLIs (claude-code, codex) may be added.
     
     Returns:
         Tuple of (provider, model)
@@ -33,14 +35,14 @@ def parse_provider_model(full_model: str) -> Tuple[str, str]:
     provider = parts[0].lower()
     
     # Check if it's a known provider prefix
-    known_providers = ["openrouter", "opencode"]
+    known_providers = ["opencode"]  # Only opencode supported
     if provider in known_providers:
         # Extract the rest as model
         remaining = parts[1]
         return (provider, remaining)
     else:
-        # Default to openrouter if not a known provider
-        return ("openrouter", full_model)
+        # Default to opencode if not a known provider
+        return ("opencode", full_model)
 
 
 class Config:
@@ -55,9 +57,6 @@ class Config:
         # Ensure directories exist
         self.conversations_dir.mkdir(parents=True, exist_ok=True)
         self.worktrees_dir.mkdir(parents=True, exist_ok=True)
-        
-        # API Configuration (optional now, only needed if using openrouter)
-        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         
         # Model Configuration - now supports provider/model format
         council_models_str = os.getenv("COUNCIL_MODELS", "")
@@ -80,11 +79,6 @@ class Config:
                 "full_name": model_str
             })
         
-        # Validate API key if using openrouter
-        uses_openrouter = any(m["provider"] == "openrouter" for m in self.council_members)
-        if uses_openrouter and not self.openrouter_api_key:
-            raise ValueError("OPENROUTER_API_KEY required when using openrouter provider")
-        
         # Chairman model
         chairman_model_str = os.getenv("CHAIRMAN_MODEL")
         if not chairman_model_str:
@@ -97,10 +91,6 @@ class Config:
             "full_name": chairman_model_str
         }
         
-        # Validate API key for chairman
-        if self.chairman["provider"] == "openrouter" and not self.openrouter_api_key:
-            raise ValueError("OPENROUTER_API_KEY required when using openrouter provider for chairman")
-        
         # Title generation model (optional, defaults to chairman model)
         title_model_str = os.getenv("TITLE_MODEL", chairman_model_str)
         title_provider, title_model = parse_provider_model(title_model_str)
@@ -109,13 +99,6 @@ class Config:
             "model": title_model,
             "full_name": title_model_str
         }
-        
-        # Validate API key for title model
-        if self.title_model["provider"] == "openrouter" and not self.openrouter_api_key:
-            raise ValueError("OPENROUTER_API_KEY required when using openrouter provider for title generation")
-        
-        # OpenRouter API endpoint
-        self.openrouter_api_url = "https://openrouter.ai/api/v1/chat/completions"
     
     @property
     def council_member_count(self) -> int:

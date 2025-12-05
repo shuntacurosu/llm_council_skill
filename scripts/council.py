@@ -32,10 +32,8 @@ class CouncilOrchestrator:
         self.config = get_config()
         self.repo_root = repo_root
         
-        # Use unified client that supports multiple providers
+        # Use unified client (OpenCode CLI only)
         self.client = UnifiedLLMClient(
-            openrouter_api_key=self.config.openrouter_api_key,
-            openrouter_api_url=self.config.openrouter_api_url,
             working_dir=repo_root
         )
         
@@ -108,6 +106,14 @@ class CouncilOrchestrator:
                 member_id, worktree_path = worktree_paths[i]
                 result["member_id"] = member_id
                 result["worktree_path"] = str(worktree_path)
+                
+                # Extract code from response and write to worktree
+                if result['response']:
+                    self._extract_and_write_code(
+                        response=result['response'],
+                        worktree_path=worktree_path,
+                        user_query=user_query
+                    )
                 
                 # Get diff if there are changes
                 try:
@@ -333,7 +339,10 @@ class CouncilOrchestrator:
         self,
         user_query: str,
         use_worktrees: bool = False,
-        context_messages: List[Dict[str, str]] = None
+        context_messages: List[Dict[str, str]] = None,
+        merge_mode: Optional[str] = None,
+        merge_member: Optional[int] = None,
+        confirm_merge: bool = False
     ) -> Dict[str, Any]:
         """
         Run the complete 3-stage council process.
@@ -342,6 +351,9 @@ class CouncilOrchestrator:
             user_query: The user's question or request
             use_worktrees: Whether to use git worktrees for code work
             context_messages: Previous conversation messages for context
+            merge_mode: Merge mode - None, "auto", "manual", or "dry-run"
+            merge_member: Member index to merge (1-based, for manual mode)
+            confirm_merge: Whether to ask for confirmation before merging
             
         Returns:
             Complete council results with all stages
@@ -405,7 +417,19 @@ class CouncilOrchestrator:
         )
         stage3_logger.info("Stage 3 complete")
         
-        # Cleanup worktrees after completion
+        # Handle merge if requested
+        merge_result = None
+        if use_worktrees and merge_mode:
+            merge_result = self._handle_merge(
+                stage1_results=stage1_results,
+                aggregate_rankings=aggregate_rankings,
+                label_to_model=label_to_model,
+                merge_mode=merge_mode,
+                merge_member=merge_member,
+                confirm_merge=confirm_merge
+            )
+        
+        # Cleanup worktrees after completion (unless dry-run keeps them for inspection)
         if use_worktrees:
             logger.info("Cleaning up worktrees...")
             try:
@@ -420,8 +444,150 @@ class CouncilOrchestrator:
             "stage2": stage2_results,
             "stage3": stage3_result,
             "aggregate_rankings": aggregate_rankings,
-            "label_to_model": label_to_model
+            "label_to_model": label_to_model,
+            "merge_result": merge_result
         }
+    
+    def _handle_merge(
+        self,
+        stage1_results: List[Dict[str, Any]],
+        aggregate_rankings: List[Tuple[str, float]],
+        label_to_model: Dict[str, str],
+        merge_mode: str,
+        merge_member: Optional[int] = None,
+        confirm_merge: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Handle the merge of worktree changes based on the specified mode.
+        
+        Args:
+            stage1_results: Results from Stage 1 with diff information
+            aggregate_rankings: Sorted rankings from Stage 2
+            label_to_model: Mapping from labels to model names
+            merge_mode: "auto", "manual", or "dry-run"
+            merge_member: Member index for manual mode (1-based)
+            confirm_merge: Whether to ask for confirmation
+            
+        Returns:
+            Dict with merge status and details
+        """
+        # Find members with diffs
+        members_with_diffs = [
+            r for r in stage1_results 
+            if r.get('diff') and r.get('member_id')
+        ]
+        
+        if not members_with_diffs:
+            logger.info("No code changes to merge (no diffs found)")
+            return {"status": "no_changes", "message": "No code changes to merge"}
+        
+        # Determine which member to merge
+        target_member = None
+        
+        if merge_mode == "dry-run":
+            # Just show diffs, don't merge
+            logger.info("\n" + "=" * 80)
+            logger.info("DRY RUN - Showing diffs without merging")
+            logger.info("=" * 80)
+            
+            for r in members_with_diffs:
+                logger.info(f"\n--- {r['model']} (member_index: {r['member_index']}) ---")
+                logger.info(r['diff'][:2000] if len(r['diff']) > 2000 else r['diff'])
+            
+            return {"status": "dry_run", "members_with_diffs": len(members_with_diffs)}
+        
+        elif merge_mode == "manual":
+            # Find member by index (1-based)
+            if merge_member is None:
+                return {"status": "error", "message": "No member index specified for manual merge"}
+            
+            target_idx = merge_member - 1  # Convert to 0-based
+            matching = [r for r in members_with_diffs if r.get('member_index') == target_idx]
+            
+            if not matching:
+                return {
+                    "status": "error", 
+                    "message": f"Member {merge_member} not found or has no changes"
+                }
+            target_member = matching[0]
+            
+        elif merge_mode == "auto":
+            # Find top-ranked member with a diff
+            if not aggregate_rankings:
+                return {"status": "error", "message": "No rankings available"}
+            
+            # Get top-ranked label
+            top_label = aggregate_rankings[0][0]  # e.g., "Response A"
+            top_model = label_to_model.get(top_label)
+            
+            if not top_model:
+                return {"status": "error", "message": f"Could not find model for {top_label}"}
+            
+            # Find the member with this model that has a diff
+            matching = [r for r in members_with_diffs if r['model'] == top_model]
+            
+            if not matching:
+                # Top-ranked member has no changes, try next
+                logger.warning(f"Top-ranked {top_model} has no code changes")
+                for label, score in aggregate_rankings[1:]:
+                    model = label_to_model.get(label)
+                    matching = [r for r in members_with_diffs if r['model'] == model]
+                    if matching:
+                        logger.info(f"Using next ranked member with changes: {model}")
+                        break
+            
+            if not matching:
+                return {"status": "error", "message": "No ranked member has code changes"}
+            
+            target_member = matching[0]
+        
+        if target_member is None:
+            return {"status": "error", "message": "No target member found for merge"}
+        
+        # Show diff and optionally confirm
+        logger.info("\n" + "=" * 80)
+        logger.info(f"MERGE TARGET: {target_member['model']}")
+        logger.info("=" * 80)
+        diff = target_member['diff']
+        logger.info(diff[:3000] if len(diff) > 3000 else diff)
+        logger.info("=" * 80)
+        
+        if confirm_merge:
+            # Ask for confirmation
+            print("\nMerge these changes? [y/N]: ", end="")
+            response = input().strip().lower()
+            if response != 'y':
+                logger.info("Merge cancelled by user")
+                return {"status": "cancelled", "message": "Merge cancelled by user"}
+        
+        # Perform the merge
+        member_id = target_member['member_id']
+        try:
+            # First commit the changes in the worktree
+            logger.info(f"Committing changes in worktree for {member_id}...")
+            committed = self.worktree_manager.commit_changes(
+                member_id, 
+                f"Council proposal from {target_member['model']}"
+            )
+            
+            if not committed:
+                return {"status": "error", "message": "Nothing to commit"}
+            
+            # Apply changes to main
+            logger.info("Applying changes to main branch...")
+            self.worktree_manager.apply_changes_to_main(member_id, strategy="merge")
+            
+            logger.success(f"  ✓ Successfully merged changes from {target_member['model']}")
+            
+            return {
+                "status": "merged",
+                "member": target_member['model'],
+                "member_id": member_id
+            }
+            
+        except Exception as e:
+            logger.error(f"  ✗ Merge failed: {e}")
+            return {"status": "error", "message": str(e)}
     
     async def generate_conversation_title(self, user_query: str) -> str:
         """

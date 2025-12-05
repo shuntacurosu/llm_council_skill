@@ -16,8 +16,7 @@
     "consensus": true
   },
   "configuration": {
-    "requiresApiKey": true,
-    "apiKeyName": "OPENROUTER_API_KEY",
+    "requiresApiKey": false,
     "configFile": "scripts/.env"
   },
   "usage": {
