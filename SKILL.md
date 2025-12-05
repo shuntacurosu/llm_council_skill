@@ -1,59 +1,59 @@
 ---
 name: LLM Council
-description: 複数のLLMを評議会として組織し、相互レビューと議長統合により集合知の最終回答を生成
+description: Orchestrate multiple LLMs as a council, generating collective intelligence through peer review and chairman synthesis
 version: 1.0.0
 dependencies: python>=3.8, python-dotenv, loguru
 ---
 
 ## Overview
 
-LLM Councilは、複数のLLMを「議員」として組織し、3段階プロセスで高品質な回答を生成するSkillです。
+LLM Council is a Skill that organizes multiple LLMs as "council members" and generates high-quality responses through a 3-stage process.
 
-### 使用シーン
+### Use Cases
 
-- 重要な意思決定に複数の視点が欲しいとき
-- コードレビューを複数のAIに依頼したいとき
-- 設計案を比較検討したいとき
-- バイアスを減らした客観的な回答が必要なとき
+- When you need multiple perspectives for important decisions
+- When you want multiple AIs to review code
+- When comparing and evaluating design proposals
+- When you need objective responses with reduced bias
 
 ## 3-Stage Process
 
-1. **Stage 1: 意見収集** - 各議員(LLM)が独立して回答
-2. **Stage 2: 相互レビュー** - 匿名化された回答を相互にランキング
-3. **Stage 3: 統合** - 議長が全意見とレビューを統合して最終回答を生成
+1. **Stage 1: Opinion Collection** - Each member (LLM) responds independently
+2. **Stage 2: Peer Review** - Anonymized responses are mutually ranked
+3. **Stage 3: Synthesis** - Chairman integrates all opinions and reviews into final response
 
 ## Quick Start
 
 ```bash
-# 基本的な質問
-python scripts/run.py council_skill.py "最適なキャッシュ戦略は？"
+# Basic question
+python scripts/run.py council_skill.py "What's the optimal caching strategy?"
 
-# コード修正（差分確認のみ）
-python scripts/run.py council_skill.py --dry-run "buggy.pyのバグを修正して"
+# Code fix (diff only)
+python scripts/run.py council_skill.py --dry-run "Fix the bug in buggy.py"
 
-# 自動マージ
-python scripts/run.py council_skill.py --auto-merge "エラー処理を追加して"
+# Auto-merge
+python scripts/run.py council_skill.py --auto-merge "Add error handling"
 ```
 
 ## Command Options
 
 | Option | Description |
 |--------|-------------|
-| `--worktrees` | Git worktreeモードで各議員が独立して作業 |
-| `--dry-run` | マージせず差分のみ表示 |
-| `--auto-merge` | 1位の提案を自動マージ |
-| `--merge N` | メンバーNの提案をマージ |
-| `--confirm` | マージ前に確認プロンプト |
-| `--no-commit` | 変更をステージングせず適用 |
-| `--list` | 会話履歴の一覧表示 |
-| `--continue N` | 会話Nを継続 |
+| `--worktrees` | Git worktree mode - each member works independently |
+| `--dry-run` | Show diff without merging |
+| `--auto-merge` | Auto-merge the top-ranked proposal |
+| `--merge N` | Merge member N's proposal |
+| `--confirm` | Show confirmation prompt before merge |
+| `--no-commit` | Apply changes without staging |
+| `--list` | Show conversation history |
+| `--continue N` | Continue conversation N |
 
 ## Setup
 
-1. `scripts/.env`を作成してモデルを設定
-2. OpenCode CLIをインストール・設定
-3. `python scripts/run.py council_skill.py --setup`で詳細確認
+1. Create `scripts/.env` to configure models
+2. Install and configure OpenCode CLI
+3. Run `python scripts/run.py council_skill.py --setup` for details
 
 ## Resources
 
-詳細は`README.md`を参照してください。
+See `README.md` for more details.

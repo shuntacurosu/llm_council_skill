@@ -9,7 +9,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Conversations,Logs
+# Conversations, Logs
 scripts/data/conversations/
 scripts/data/logs/
 
