@@ -4,10 +4,14 @@ import subprocess
 import asyncio
 import shutil
 import os
+import tempfile
 from typing import Optional, Dict, Any
 from pathlib import Path
 
 from logger import logger
+
+# Maximum command line length on Windows (conservative estimate)
+MAX_CMD_LENGTH = 6000
 
 
 class OpenCodeClient:
@@ -62,16 +66,43 @@ class OpenCodeClient:
         """
         cwd = working_dir or self.working_dir
         
-        # Build the opencode run command
-        cmd = [
-            self.opencode_path, "run",
-            "-m", model,
-            prompt
-        ]
+        # Check if prompt is too long for command line
+        # If so, write to a temp file and use --file flag
+        use_temp_file = len(prompt) > MAX_CMD_LENGTH
+        temp_file_path = None
         
         try:
-            # Run opencode in a subprocess (use shell=True on Windows for .cmd files)
-            if os.name == 'nt' and self.opencode_path.endswith('.cmd'):
+            if use_temp_file:
+                # Create temp file with prompt
+                fd, temp_file_path = tempfile.mkstemp(suffix='.txt', prefix='opencode_prompt_')
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(prompt)
+                
+                # Build command with file input
+                # Use a simple instruction to read the file
+                cmd = [
+                    self.opencode_path, "run",
+                    "-m", model,
+                    "-f", temp_file_path,
+                    "Execute the task described in the attached file."
+                ]
+            else:
+                # Build the opencode run command
+                cmd = [
+                    self.opencode_path, "run",
+                    "-m", model,
+                    prompt
+                ]
+        
+            if use_temp_file:
+                # Use exec for temp file approach (no shell quoting issues)
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(cwd)
+                )
+            elif os.name == 'nt' and self.opencode_path.endswith('.cmd'):
                 # On Windows, run through shell for .cmd files
                 process = await asyncio.create_subprocess_shell(
                     f'"{self.opencode_path}" run -m {model} "{prompt}"',
@@ -113,6 +144,13 @@ class OpenCodeClient:
         except Exception as e:
             logger.error(f"Error querying model {model} via OpenCode: {e}")
             return None
+        finally:
+            # Clean up temp file if used
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except Exception:
+                    pass
     
     async def query_model_in_worktree(
         self,

@@ -107,13 +107,8 @@ class CouncilOrchestrator:
                 result["member_id"] = member_id
                 result["worktree_path"] = str(worktree_path)
                 
-                # Extract code from response and write to worktree
-                if result['response']:
-                    self._extract_and_write_code(
-                        response=result['response'],
-                        worktree_path=worktree_path,
-                        user_query=user_query
-                    )
+                # OpenCode directly edits files in the worktree via CLI
+                # No need to extract code from response - changes are already made
                 
                 # Get diff if there are changes
                 try:
