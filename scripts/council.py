@@ -270,11 +270,10 @@ class CouncilOrchestrator:
         Parse the FINAL RANKING section from the model's response.
 
         Handles various formats:
-        - "FINAL RANKING:\n1. Response A\n2. Response B"
+        - "FINAL RANKING:\n1. A\n2. B"
         - "1. A\n2. B"
         - "A > B > C"
-        - "Best: A, Second: B"
-        - Just letters: "A, B, C" or "A B C"
+        - "A, B, C"
 
         Args:
             ranking_text: The full text response from the model
@@ -293,64 +292,63 @@ class CouncilOrchestrator:
             if marker in text:
                 parts = text.split(marker, 1)
                 if len(parts) >= 2:
-                    # Take next 500 chars or until next section
-                    ranking_section = parts[1][:500]
+                    # Take next 300 chars or until next section
+                    ranking_section = parts[1][:300]
                     break
 
         if not ranking_section:
-            # Try to find ranking anywhere in text
-            ranking_section = text
+            # Try last 300 chars of text (ranking is usually at the end)
+            ranking_section = text[-300:]
 
-        # Strategy 2: Try numbered list format ("1. Response A", "1. Proposal A", "1. A")
+        # Strategy 2: Try numbered list format ("1. A", "1. B", etc.)
+        # Match patterns like "1. A", "1) A", "1 A", "1. Response A", "1. Proposal A"
         numbered_matches = re.findall(
-            r"(\d+)[\.)\s]+(?:RESPONSE|PROPOSAL)?\s*([A-Z])(?:\s|$|\n|,|\.|>)",
+            r"(\d+)[\.)\s]+(?:RESPONSE|PROPOSAL)?\s*([A-E])(?:\s|$|\n|,|\.|>|:)",
             ranking_section,
         )
         if numbered_matches:
             # Sort by number and extract letters
             sorted_matches = sorted(numbered_matches, key=lambda x: int(x[0]))
             result = [f"Response {letter}" for _, letter in sorted_matches]
-            if result:
+            if len(result) >= 2:
                 return result
 
-        # Strategy 3: Look for comparison format ("A > B > C" or "A, B, C")
-        comparison_match = re.search(
-            r"([A-Z])\s*[>,]\s*([A-Z])(?:\s*[>,]\s*([A-Z]))?(?:\s*[>,]\s*([A-Z]))?",
+        # Strategy 3: Look for comparison format ("A > B > C" or "A, B, C" or "A B C")
+        # Find all standalone letters A-E in order
+        letter_matches = re.findall(
+            r"(?:^|[\s\n,\.>:)])([A-E])(?:[\s\n,\.>:)]|$)",
             ranking_section,
         )
-        if comparison_match:
-            letters = [g for g in comparison_match.groups() if g]
-            result = [f"Response {letter}" for letter in letters]
-            if result:
-                return result
+        if letter_matches and len(letter_matches) >= 2:
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_letters = []
+            for letter in letter_matches:
+                if letter not in seen:
+                    seen.add(letter)
+                    unique_letters.append(letter)
+            if len(unique_letters) >= 2:
+                return [f"Response {letter}" for letter in unique_letters]
 
         # Strategy 4: Look for ordinal format ("Best: A", "First: A", "1st: A")
         ordinal_matches = re.findall(
-            r"(?:BEST|FIRST|1ST|SECOND|2ND|THIRD|3RD|\d+(?:ST|ND|RD|TH))[:\s]+(?:RESPONSE|PROPOSAL)?\s*([A-Z])",
+            r"(?:BEST|FIRST|1ST|SECOND|2ND|THIRD|3RD|FOURTH|4TH|FIFTH|5TH|\d+(?:ST|ND|RD|TH))[:\s]+(?:RESPONSE|PROPOSAL)?\s*([A-E])",
             ranking_section,
         )
-        if ordinal_matches:
-            result = [f"Response {letter}" for letter in ordinal_matches]
-            if result:
-                return result
+        if ordinal_matches and len(ordinal_matches) >= 2:
+            return [f"Response {letter}" for letter in ordinal_matches]
 
-        # Strategy 5: Just look for single letters in order (last resort)
-        # Only in the ranking section, find standalone A, B, C
-        if ranking_section:
-            letter_matches = re.findall(
-                r"(?:^|\s|\n)([A-C])(?:\s|$|\n|,|\.)", ranking_section[:200]
-            )
-            if letter_matches and len(letter_matches) >= 2:
-                # Remove duplicates while preserving order
-                seen = set()
-                unique_letters = []
-                for letter in letter_matches:
-                    if letter not in seen:
-                        seen.add(letter)
-                        unique_letters.append(letter)
-                result = [f"Response {letter}" for letter in unique_letters]
-                if result:
-                    return result
+        # Strategy 5: Fallback - just find any A-E letters in ranking section
+        simple_matches = re.findall(r"[A-E]", ranking_section[:150])
+        if simple_matches:
+            seen = set()
+            unique = []
+            for letter in simple_matches:
+                if letter not in seen:
+                    seen.add(letter)
+                    unique.append(letter)
+            if len(unique) >= 2:
+                return [f"Response {letter}" for letter in unique]
 
         # Failed to parse
         return []

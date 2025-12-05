@@ -12,32 +12,26 @@ STAGE2_RANKING_PROMPT = """You are evaluating different responses to the followi
 
 Question: {user_query}
 
-Here are the responses from different models (anonymized):
+Here are the responses from different models (anonymized as A, B, C, D, E):
 
 {responses_text}
 
 Your task:
-1. First, evaluate each response individually. For each response, explain what it does well and what it does poorly.
-2. Then, at the very end of your response, provide a final ranking.
+1. Briefly evaluate each response (A, B, C, D, E)
+2. Provide your final ranking at the end
 
-IMPORTANT: Your final ranking MUST be formatted EXACTLY as follows:
-- Start with the line "FINAL RANKING:" (all caps, with colon)
-- Then list the responses from best to worst as a numbered list
-- Each line should be: number, period, space, then ONLY the response label (e.g., "1. Response A")
-- Do not add any other text or explanations in the ranking section
-
-Example of the correct format for your ENTIRE response:
-
-Response A provides good detail on X but misses Y...
-Response B is accurate but lacks depth on Z...
-Response C offers the most comprehensive answer...
+CRITICAL: You MUST end your response with EXACTLY this format:
 
 FINAL RANKING:
-1. Response C
-2. Response A
-3. Response B
+1. A
+2. B
+3. C
+4. D
+5. E
 
-Now provide your evaluation and ranking:"""
+(Replace with your actual ranking order. Use ONLY single letters A, B, C, D, E)
+
+Now evaluate and rank:"""
 
 # Stage 3: Chairman synthesis prompt
 STAGE3_SYNTHESIS_PROMPT = """You are the Chairman of an LLM Council. Multiple AI models have provided responses to a user's question, and then ranked each other's responses.
@@ -73,21 +67,49 @@ CODE_STAGE2_REVIEW_PROMPT = """You are reviewing different code change proposals
 
 Original Task: {user_query}
 
-Here are the proposed changes from different models (anonymized):
+Here are the proposed changes from different models. Each proposal is labeled with a SINGLE LETTER:
+- Proposal A
+- Proposal B
+- Proposal C
+- Proposal D
+- Proposal E
 
 {changes_text}
 
 Your task:
-1. Evaluate each proposal's correctness, completeness, and code quality
-2. Identify strengths and weaknesses of each approach
-3. Provide a final ranking
+1. Briefly evaluate each proposal (mention them as A, B, C, D, E)
+2. Provide your final ranking at the end
 
-IMPORTANT: Your final ranking MUST be formatted EXACTLY as follows:
-- Start with the line "FINAL RANKING:" (all caps, with colon)
-- Then list the proposals from best to worst as a numbered list
-- Each line should be: number, period, space, then ONLY the proposal label (e.g., "1. Proposal A")
+═══════════════════════════════════════════════════════════════
+CRITICAL FORMATTING REQUIREMENT - READ CAREFULLY:
 
-Now provide your evaluation and ranking:"""
+You MUST end your response with a ranking section in EXACTLY this format:
+
+FINAL RANKING:
+1. A
+2. B
+3. C
+4. D
+5. E
+
+RULES:
+- Use ONLY the letters A, B, C, D, E (these are the ONLY valid proposal labels)
+- Do NOT use any other letters like S, R, N, I, M, G, P, etc.
+- Do NOT use model names or numbers
+- Each letter must appear exactly once
+- The order represents best (1) to worst (5)
+
+EXAMPLE of CORRECT format:
+FINAL RANKING:
+1. C
+2. A
+3. E
+4. B
+5. D
+
+═══════════════════════════════════════════════════════════════
+
+Now evaluate and rank the proposals:"""
 
 CODE_STAGE3_SYNTHESIS_PROMPT = """You are the Chairman of an LLM Council for code review. Multiple AI models have proposed code changes and reviewed each other's work.
 
