@@ -1,267 +1,271 @@
 # LLM Council - Claude Skill
 
+![LLM Council Header](refs/header.jpg)
+
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 
-複数のLLMを「議員」に見立て、集合知による意思決定を行うClaude Skillです。
+[English](./README.md) | [日本語](./README.ja.md)
 
-## 概要
+A Claude Skill that orchestrates multiple LLMs as a "council" to achieve collective intelligence through peer review and synthesis.
 
-LLM Councilは、単一のLLMに質問するのではなく、複数のLLMを「評議会」として組織し、以下の3段階プロセスで結論を導き出します:
+## Overview
 
-1. **Stage 1: 初回意見収集** - 各議員(LLM)が独立して質問に回答
-2. **Stage 2: 相互レビュー** - 各議員が他の議員の回答を匿名でレビュー・ランキング
-3. **Stage 3: 最終統合** - 議長(Chairman LLM)が全ての意見とレビューを統合して最終回答を生成
+LLM Council organizes multiple LLMs as a "council" instead of querying a single LLM, deriving conclusions through a 3-stage process:
 
-### 主な特徴
+1. **Stage 1: Opinion Collection** - Each council member (LLM) independently responds to the query
+2. **Stage 2: Peer Review** - Each member anonymously reviews and ranks other members' responses
+3. **Stage 3: Final Synthesis** - The Chairman LLM integrates all opinions and reviews into the final response
 
-- **Git Worktree統合**: 各議員の作業を独立したgit worktreeで管理
-- **匿名レビュー**: Stage 2では議員の身元を匿名化して公平なレビューを実現
-- **OpenCode CLI統合**: ワークツリー内でコードを直接生成・編集
-- **柔軟な設定**: 議員モデルと議長モデルを自由に設定可能
-- **リアルタイム進捗表示**: 各モデルのクエリ状態をリアルタイムで表示
-- **会話履歴管理**: 全ての評議会セッションをJSON形式で保存
+### Key Features
 
-## セットアップ
+- **Git Worktree Integration**: Manage each member's work in independent git worktrees
+- **Anonymous Review**: Member identities are anonymized in Stage 2 for fair evaluation
+- **OpenCode CLI Integration**: Generate and edit code directly within worktrees
+- **Flexible Configuration**: Freely configure member models and chairman model
+- **Real-time Progress Display**: Show query status for each model in real-time
+- **Conversation History**: Save all council sessions in JSON format
 
-### 1. 環境変数の設定
+## Setup
 
-`scripts/.env`ファイルを作成し、使用するモデルを設定します:
+### 1. Environment Variables
+
+Create a `scripts/.env` file to configure the models:
 
 ```bash
 cd scripts
 cp .env.example .env
 ```
 
-`.env`ファイルを編集:
+Edit `.env`:
 
 ```env
-# Council Members - カンマ区切りのprovider/modelリスト
-# 形式: opencode/provider/model (またはprovider/model、デフォルトでopencode)
-# 例:
+# Council Members - comma-separated provider/model list
+# Format: opencode/provider/model (or provider/model, defaults to opencode)
+# Examples:
 #   opencode/openrouter/openai/gpt-4
 #   opencode/anthropic/claude-3-5-sonnet-20241022
-#   anthropic/claude-3-5-sonnet-20241022  (opencodeプレフィックスは省略可)
+#   anthropic/claude-3-5-sonnet-20241022  (opencode prefix can be omitted)
 COUNCIL_MODELS=opencode/openai/gpt-4,opencode/anthropic/claude-3-5-sonnet,opencode/google/gemini-pro
 
-# Chairman Model - 最終統合を行うモデル
+# Chairman Model - performs final synthesis
 CHAIRMAN_MODEL=opencode/anthropic/claude-3-5-sonnet
 
-# Title Generation Model - 会話タイトル生成用 (オプション、デフォルトはCHAIRMAN_MODEL)
+# Title Generation Model - for conversation titles (optional, defaults to CHAIRMAN_MODEL)
 # TITLE_MODEL=opencode/anthropic/claude-3-5-haiku-20241022
 ```
 
-### OpenCode CLIについて
+### About OpenCode CLI
 
-このツールは[OpenCode CLI](https://github.com/sst/opencode)を使用してLLMとやり取りします。
-OpenCodeがインストールされ、適切に設定されている必要があります。
+This tool uses [OpenCode CLI](https://github.com/sst/opencode) to interact with LLMs.
+OpenCode must be installed and properly configured.
 
-**注意**: 将来的にclaude-code、codexなど他のCLIツールもサポート予定です。
+**Note**: Future support for other CLI tools like claude-code and codex is planned.
 
-### 2. 仮想環境の作成（自動）
+### 2. Virtual Environment (Automatic)
 
-初回実行時に自動で仮想環境が作成され、依存関係がインストールされます。
+A virtual environment is automatically created on first run with dependencies installed.
 
-手動で仮想環境をセットアップする場合:
+To manually set up the virtual environment:
 
 ```bash
 python scripts/setup_environment.py
 ```
 
-### 3. Gitリポジトリの確認
+### 3. Git Repository
 
-このツールはgit worktreeを使用するため、gitリポジトリ内で実行する必要があります。
+This tool uses git worktrees, so it must be run within a git repository.
 
-## 使用方法
+## Usage
 
-### 基本的な使用（推奨）
+### Basic Usage (Recommended)
 
-`run.py`を使用すると、仮想環境が自動でセットアップされ、正しいPython環境でスクリプトが実行されます:
-
-```bash
-python scripts/run.py council_skill.py "質問をここに入力"
-```
-
-例:
-```bash
-python scripts/run.py council_skill.py "Webアプリケーションにキャッシングを実装する最適なアプローチは何ですか?"
-```
-
-### コマンドラインオプション
-
-#### 基本オプション
-
-| オプション | 説明 | 例 |
-|------------|------|-----|
-| `query` | 評議会に送る質問（位置引数） | `"質問内容"` |
-| `--worktrees` | Git worktreeモードを有効化 | `--worktrees` |
-| `--list` | 会話履歴の一覧を表示 | `--list` |
-| `--show N` | 会話Nの詳細を表示 | `--show 1` |
-| `--continue N` | 会話Nを継続 | `--continue 1 "追加質問"` |
-| `--setup` | セットアップガイドを表示 | `--setup` |
-
-#### マージオプション（`--worktrees` 使用時）
-
-| オプション | 説明 | 例 |
-|------------|------|-----|
-| `--auto-merge` | 1位の提案を自動マージ | `--auto-merge` |
-| `--merge N` | メンバーNの提案をマージ | `--merge 2` |
-| `--dry-run` | マージせず差分のみ表示 | `--dry-run` |
-| `--confirm` | マージ前に確認プロンプト表示 | `--auto-merge --confirm` |
-| `--no-commit` | 変更をステージングせず適用 | `--auto-merge --no-commit` |
-
-#### 使用例
+Using `run.py` automatically sets up the virtual environment and runs the script with the correct Python environment:
 
 ```bash
-# 基本的な質問
-python scripts/run.py council_skill.py "最適なキャッシュ戦略は？"
-
-# コード修正（差分確認のみ）
-python scripts/run.py council_skill.py --dry-run "buggy.pyのバグを修正して"
-
-# コード修正（自動マージ、確認あり）
-python scripts/run.py council_skill.py --auto-merge --confirm "divide関数にエラー処理を追加"
-
-# コード修正（自動マージ、コミットなし）
-python scripts/run.py council_skill.py --auto-merge --no-commit "テスト追加"
-
-# 特定メンバーの提案をマージ
-python scripts/run.py council_skill.py --merge 2 "リファクタリング"
-
-# 会話の継続
-python scripts/run.py council_skill.py --continue 1 "もう少し詳しく"
+python scripts/run.py council_skill.py "Enter your question here"
 ```
 
-### 会話履歴の確認
+Example:
+```bash
+python scripts/run.py council_skill.py "What is the best approach to implement caching in a web application?"
+```
+
+### Command Line Options
+
+#### Basic Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `query` | Question to send to the council (positional) | `"Your question"` |
+| `--worktrees` | Enable Git worktree mode | `--worktrees` |
+| `--list` | Show conversation history | `--list` |
+| `--show N` | Show details of conversation N | `--show 1` |
+| `--continue N` | Continue conversation N | `--continue 1 "Follow-up"` |
+| `--setup` | Show setup guide | `--setup` |
+
+#### Merge Options (with `--worktrees`)
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--auto-merge` | Auto-merge the top-ranked proposal | `--auto-merge` |
+| `--merge N` | Merge member N's proposal | `--merge 2` |
+| `--dry-run` | Show diff without merging | `--dry-run` |
+| `--confirm` | Show confirmation before merge | `--auto-merge --confirm` |
+| `--no-commit` | Apply without staging | `--auto-merge --no-commit` |
+
+#### Examples
+
+```bash
+# Basic question
+python scripts/run.py council_skill.py "What's the optimal caching strategy?"
+
+# Code fix (diff only)
+python scripts/run.py council_skill.py --dry-run "Fix the bug in buggy.py"
+
+# Code fix (auto-merge with confirmation)
+python scripts/run.py council_skill.py --auto-merge --confirm "Add error handling to divide function"
+
+# Code fix (auto-merge without commit)
+python scripts/run.py council_skill.py --auto-merge --no-commit "Add tests"
+
+# Merge specific member's proposal
+python scripts/run.py council_skill.py --merge 2 "Refactor this"
+
+# Continue conversation
+python scripts/run.py council_skill.py --continue 1 "Tell me more"
+```
+
+### View Conversation History
 
 ```bash
 python scripts/run.py council_skill.py --list
 ```
 
-### セットアップガイドの表示
+### Show Setup Guide
 
 ```bash
 python scripts/run.py council_skill.py --setup
 ```
 
-### 仮想環境の状態確認
+### Check Virtual Environment Status
 
 ```bash
 python scripts/setup_environment.py --check
 ```
 
-## プロジェクト構造
+## Project Structure
 
 ```
 llm_council/
-├── .venv/                     # 仮想環境(自動作成)
+├── .venv/                     # Virtual environment (auto-created)
 ├── scripts/
 │   ├── __init__.py
-│   ├── run.py                 # 仮想環境経由でスクリプトを実行
-│   ├── setup_environment.py   # 仮想環境セットアップ
-│   ├── council_skill.py       # メインエントリーポイント（後方互換）
-│   ├── api.py                 # 高レベルAPI（ダッシュボード向け）
-│   ├── cli.py                 # CLIインターフェース
-│   ├── config.py              # 設定管理
-│   ├── council.py             # 3段階評議会ロジック
-│   ├── worktree_manager.py    # Git worktree管理
-│   ├── unified_client.py      # 統合LLMクライアント
-│   ├── opencode_client.py     # OpenCode CLIクライアント
-│   ├── storage.py             # 会話履歴保存
-│   ├── logger.py              # ログ設定
-│   ├── .env                   # 環境変数(作成が必要)
-│   ├── .env.example           # 環境変数テンプレート
+│   ├── run.py                 # Run scripts via virtual environment
+│   ├── setup_environment.py   # Virtual environment setup
+│   ├── council_skill.py       # Main entry point (backward compatible)
+│   ├── api.py                 # High-level API (for dashboard)
+│   ├── cli.py                 # CLI interface
+│   ├── config.py              # Configuration management
+│   ├── council.py             # 3-stage council logic
+│   ├── worktree_manager.py    # Git worktree management
+│   ├── unified_client.py      # Unified LLM client
+│   ├── opencode_client.py     # OpenCode CLI client
+│   ├── storage.py             # Conversation history storage
+│   ├── logger.py              # Logging configuration
+│   ├── .env                   # Environment variables (create this)
+│   ├── .env.example           # Environment variables template
 │   ├── data/
-│   │   ├── conversations/     # 会話履歴JSON
-│   │   └── logs/              # 実行ログ
+│   │   ├── conversations/     # Conversation history JSON
+│   │   └── logs/              # Execution logs
 │   ├── prompts/
-│   │   └── templates.py       # プロンプトテンプレート
-│   └── worktrees/             # Git worktreeディレクトリ
-├── requirements.txt           # Python依存関係
-├── skill.json                 # Claude Skill定義
-└── README.md                  # このファイル
+│   │   └── templates.py       # Prompt templates
+│   └── worktrees/             # Git worktree directory
+├── requirements.txt           # Python dependencies
+├── skill.json                 # Claude Skill definition
+└── README.md                  # This file
 ```
 
-## 動作の詳細
+## How It Works
 
-### Stage 1: 初回意見収集
+### Stage 1: Opinion Collection
 
-各議員(設定されたLLMモデル)が、ユーザーの質問に対して独立して回答します。
+Each council member (configured LLM model) independently responds to the user's query.
 
-- 通常モード: テキストベースの回答
-- Worktreeモード: 各議員が独立したworktreeで作業し、コード変更を生成
+- Normal mode: Text-based responses
+- Worktree mode: Each member works in an independent worktree to generate code changes
 
-### Stage 2: 相互レビュー
+### Stage 2: Peer Review
 
-全ての議員が、他の議員の回答を匿名でレビューします。
+All members anonymously review other members' responses.
 
-- 回答は「Response A」「Response B」などと匿名化
-- 各議員が全ての回答を評価し、ランキングを提供
-- 集計スコアを計算して総合ランキングを生成
+- Responses are anonymized as "Response A", "Response B", etc.
+- Each member evaluates and ranks all responses
+- Aggregate scores are calculated to generate overall rankings
 
-### Stage 3: 最終統合
+### Stage 3: Final Synthesis
 
-議長モデルが、全ての意見とレビュー結果を統合して、最終的な回答を生成します。
+The chairman model integrates all opinions and review results to generate the final response.
 
-- 各議員の意見の強みを考慮
-- ピアレビューで明らかになった問題点を反映
-- 合意パターンや相違点を分析
-- 評議会の集合知を表す明確な最終回答を提供
+- Considers strengths of each member's opinion
+- Reflects issues identified in peer review
+- Analyzes consensus patterns and differences
+- Provides a clear final response representing the council's collective intelligence
 
-## カスタマイズ
+## Customization
 
-### 議員モデルの変更
+### Changing Council Members
 
-`scripts/.env`の`COUNCIL_MODELS`を編集:
+Edit `COUNCIL_MODELS` in `scripts/.env`:
 
 ```env
 COUNCIL_MODELS=opencode/openai/gpt-4-turbo,opencode/anthropic/claude-3-opus,opencode/google/gemini-pro
 ```
 
-### 議長モデルの変更
+### Changing Chairman Model
 
-`scripts/.env`の`CHAIRMAN_MODEL`を編集:
+Edit `CHAIRMAN_MODEL` in `scripts/.env`:
 
 ```env
 CHAIRMAN_MODEL=opencode/anthropic/claude-3-5-sonnet
 ```
 
-### プロンプトのカスタマイズ
+### Customizing Prompts
 
-`scripts/prompts/templates.py`を編集して、各ステージのプロンプトをカスタマイズできます。
+Edit `scripts/prompts/templates.py` to customize prompts for each stage.
 
-## トラブルシューティング
+## Troubleshooting
 
-### "not a git repository"エラー
+### "not a git repository" Error
 
-このツールはgitリポジトリ内で実行する必要があります。`git init`でリポジトリを初期化してください。
+This tool must be run within a git repository. Initialize with `git init`.
 
-### Worktreeの削除
+### Removing Worktrees
 
-何らかの理由でworktreeが残っている場合:
+If worktrees remain for some reason:
 
 ```bash
 git worktree prune
 ```
 
-または手動で:
+Or manually:
 
 ```bash
 rm -rf scripts/worktrees/*
 git worktree prune
 ```
 
-## ライセンス
+## License
 
 MIT License
 
-## 謝辞
+## Acknowledgments
 
-このプロジェクトは[Andrej Karpathy氏のllm-council](https://github.com/karpathy/llm-council)にインスパイアされています。
+This project is inspired by [Andrej Karpathy's llm-council](https://github.com/karpathy/llm-council).
 
-## 今後の拡張予定
+## Future Plans
 
-- [x] ~~Opencodeツールとの統合(コマンドベースのLLMインターフェース)~~
-- [x] ~~リアルタイム進捗表示~~
-- [ ] より詳細な議員設定(温度パラメータ、専門分野など)
+- [x] ~~OpenCode tool integration (command-based LLM interface)~~
+- [x] ~~Real-time progress display~~
+- [ ] More detailed member settings (temperature parameters, expertise areas, etc.)
 - [ ] Webインターフェースの再実装(オプション)
