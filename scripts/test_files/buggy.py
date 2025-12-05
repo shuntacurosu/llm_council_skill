@@ -1,18 +1,11 @@
 """Test file for worktree merge scenario."""
 
 
-def divide(a: float, b: float) -> float | None:
-    """Divide a by b safely.
-
-    Returns None if division by zero occurs.
-    Other exceptions are propagated normally.
-    """
-    try:
-        return a / b
-    except ZeroDivisionError:
-        return None
+def divide(a, b):
+    """Divide a by b. Has a bug - doesn't handle division by zero."""
+    return a / b
 
 
-def calculate(x: int | float) -> int | float:
+def calculate(x):
     """Simple calculation function."""
     return x * 2
