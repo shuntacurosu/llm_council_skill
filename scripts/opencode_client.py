@@ -100,6 +100,8 @@ class OpenCodeClient:
                     timeout=timeout
                 )
             else:
+                # Build the opencode run command with prompt as argument
+                cmd = [self.opencode_path, "run", "-m", model, prompt]
                 process = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
