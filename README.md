@@ -87,19 +87,50 @@ python scripts/run.py council_skill.py "質問をここに入力"
 python scripts/run.py council_skill.py "Webアプリケーションにキャッシングを実装する最適なアプローチは何ですか?"
 ```
 
-### Git Worktreeを使用したコード作業
+### コマンドラインオプション
 
-コードレビューや変更提案が必要な場合、`--worktrees`フラグを使用します:
+#### 基本オプション
+
+| オプション | 説明 | 例 |
+|------------|------|-----|
+| `query` | 評議会に送る質問（位置引数） | `"質問内容"` |
+| `--worktrees` | Git worktreeモードを有効化 | `--worktrees` |
+| `--list` | 会話履歴の一覧を表示 | `--list` |
+| `--show N` | 会話Nの詳細を表示 | `--show 1` |
+| `--continue N` | 会話Nを継続 | `--continue 1 "追加質問"` |
+| `--setup` | セットアップガイドを表示 | `--setup` |
+
+#### マージオプション（`--worktrees` 使用時）
+
+| オプション | 説明 | 例 |
+|------------|------|-----|
+| `--auto-merge` | 1位の提案を自動マージ | `--auto-merge` |
+| `--merge N` | メンバーNの提案をマージ | `--merge 2` |
+| `--dry-run` | マージせず差分のみ表示 | `--dry-run` |
+| `--confirm` | マージ前に確認プロンプト表示 | `--auto-merge --confirm` |
+| `--no-commit` | 変更をステージングせず適用 | `--auto-merge --no-commit` |
+
+#### 使用例
 
 ```bash
-python scripts/run.py council_skill.py "この関数のパフォーマンスを改善してください" --worktrees
-```
+# 基本的な質問
+python scripts/run.py council_skill.py "最適なキャッシュ戦略は？"
 
-このモードでは:
-- 各議員が独立したgit worktreeで作業
-- コード変更がdiffとして管理
-- 匿名化されたdiffを相互レビュー
-- 最終的な変更のみをメインブランチに統合
+# コード修正（差分確認のみ）
+python scripts/run.py council_skill.py --dry-run "buggy.pyのバグを修正して"
+
+# コード修正（自動マージ、確認あり）
+python scripts/run.py council_skill.py --auto-merge --confirm "divide関数にエラー処理を追加"
+
+# コード修正（自動マージ、コミットなし）
+python scripts/run.py council_skill.py --auto-merge --no-commit "テスト追加"
+
+# 特定メンバーの提案をマージ
+python scripts/run.py council_skill.py --merge 2 "リファクタリング"
+
+# 会話の継続
+python scripts/run.py council_skill.py --continue 1 "もう少し詳しく"
+```
 
 ### 会話履歴の確認
 
