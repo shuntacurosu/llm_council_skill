@@ -468,27 +468,34 @@ class CouncilOrchestrator:
         merge_result = None
         if use_worktrees and merge_mode:
             if merge_mode == "auto":
-                merge_result = self.worktree_manager.merge_top_ranked_changes(
+                merge_result = self._handle_merge(
                     stage1_results=stage1_results,
                     aggregate_rankings=aggregate_rankings,
                     label_to_model=label_to_model,
-                    dry_run=False,
-                    confirm=confirm_merge,
+                    merge_mode="auto",
+                    merge_member=None,
+                    confirm_merge=confirm_merge,
+                    no_commit=no_commit,
                 )
             elif merge_mode == "manual":
-                merge_result = self.worktree_manager.merge_member_changes(
-                    stage1_results=stage1_results,
-                    member_index=merge_member,
-                    dry_run=False,
-                    confirm=confirm_merge,
-                )
-            elif merge_mode == "dry-run":
-                merge_result = self.worktree_manager.merge_top_ranked_changes(
+                merge_result = self._handle_merge(
                     stage1_results=stage1_results,
                     aggregate_rankings=aggregate_rankings,
                     label_to_model=label_to_model,
-                    dry_run=True,
-                    confirm=False,
+                    merge_mode="manual",
+                    merge_member=merge_member,
+                    confirm_merge=confirm_merge,
+                    no_commit=no_commit,
+                )
+            elif merge_mode == "dry-run":
+                merge_result = self._handle_merge(
+                    stage1_results=stage1_results,
+                    aggregate_rankings=aggregate_rankings,
+                    label_to_model=label_to_model,
+                    merge_mode="dry-run",
+                    merge_member=None,
+                    confirm_merge=False,
+                    no_commit=False,
                 )
             else:
                 merge_result = {

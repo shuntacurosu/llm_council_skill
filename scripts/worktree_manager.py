@@ -302,33 +302,9 @@ class WorktreeManager:
 
         # Apply the diff to main repository using git apply
         # This applies the patch without committing
-        returncode, stdout, stderr = self._run_git_command(
-            ["apply", "--3way", "-"], cwd=self.repo_root
-        )
-
-        if returncode != 0:
-            # Try without 3-way merge
-            import subprocess
-
-            result = subprocess.run(
-                ["git", "apply", "-"],
-                cwd=str(self.repo_root),
-                input=diff,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            )
-
-            if result.returncode != 0:
-                # If patch fails, try copying files directly
-                logger.warning(
-                    f"git apply failed: {result.stderr}, trying direct file copy"
-                )
-                return self._copy_changed_files(member_id)
-
-        # Need to pass the diff via stdin
         import subprocess
 
+        # First try with --3way for better conflict handling
         result = subprocess.run(
             ["git", "apply", "--3way"],
             cwd=str(self.repo_root),
