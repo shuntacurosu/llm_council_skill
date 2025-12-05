@@ -28,6 +28,9 @@ LLM Council is a Skill that organizes multiple LLMs as "council members" and gen
 # Basic question
 python scripts/run.py council_skill.py "What's the optimal caching strategy?"
 
+# With TUI dashboard
+python scripts/run.py cli.py --dashboard "What's the optimal caching strategy?"
+
 # Code fix (diff only)
 python scripts/run.py council_skill.py --dry-run "Fix the bug in buggy.py"
 
@@ -39,6 +42,7 @@ python scripts/run.py council_skill.py --auto-merge "Add error handling"
 
 | Option | Description |
 |--------|-------------|
+| `--dashboard`, `-d` | TUI dashboard for real-time monitoring |
 | `--worktrees` | Git worktree mode - each member works independently |
 | `--dry-run` | Show diff without merging |
 | `--auto-merge` | Auto-merge the top-ranked proposal |

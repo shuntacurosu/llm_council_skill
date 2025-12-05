@@ -22,22 +22,49 @@ from prompts.templates import (
 class CouncilOrchestrator:
     """Orchestrates the 3-stage council process."""
 
-    def __init__(self, repo_root: Path):
+    def __init__(self, repo_root: Path, dashboard=None):
         """
         Initialize the council orchestrator.
 
         Args:
             repo_root: Root directory of the git repository
+            dashboard: Optional dashboard for live updates
         """
         self.config = get_config()
         self.repo_root = repo_root
+        self.dashboard = dashboard
 
         # Use unified client (OpenCode CLI only)
-        self.client = UnifiedLLMClient(working_dir=repo_root)
+        self.client = UnifiedLLMClient(working_dir=repo_root, dashboard=dashboard)
 
         self.worktree_manager = WorktreeManager(
             repo_root=repo_root, worktrees_dir=self.config.worktrees_dir
         )
+        
+        # Register members with dashboard if available
+        if dashboard:
+            for member in self.config.get_council_members():
+                member_id = member["full_name"].replace("/", "_").replace(":", "_")
+                dashboard.register_member(
+                    member_id,
+                    member["full_name"],
+                    member["provider"]
+                )
+    
+    def set_dashboard(self, dashboard) -> None:
+        """Set the dashboard for live updates."""
+        self.dashboard = dashboard
+        self.client.set_dashboard(dashboard)
+        
+        # Register members
+        if dashboard:
+            for member in self.config.get_council_members():
+                member_id = member["full_name"].replace("/", "_").replace(":", "_")
+                dashboard.register_member(
+                    member_id,
+                    member["full_name"],
+                    member["provider"]
+                )
 
     async def stage1_collect_responses(
         self,
@@ -428,6 +455,8 @@ class CouncilOrchestrator:
         stage1_logger = get_stage_logger("stage1")
         logger.info("Stage 1: Collecting individual responses...")
         stage1_logger.info("Starting Stage 1")
+        if self.dashboard:
+            self.dashboard.set_stage(1, "Collecting Responses")
         stage1_results = await self.stage1_collect_responses(
             user_query, use_worktrees, context_messages=context_messages
         )
@@ -445,6 +474,8 @@ class CouncilOrchestrator:
         stage2_logger = get_stage_logger("stage2")
         logger.info("Stage 2: Collecting peer rankings...")
         stage2_logger.info("Starting Stage 2")
+        if self.dashboard:
+            self.dashboard.set_stage(2, "Peer Rankings")
         stage2_results, label_to_model = await self.stage2_collect_rankings(
             user_query, stage1_results, use_diffs=use_worktrees
         )
@@ -459,6 +490,8 @@ class CouncilOrchestrator:
         stage3_logger = get_stage_logger("stage3")
         logger.info("Stage 3: Synthesizing final response...")
         stage3_logger.info("Starting Stage 3")
+        if self.dashboard:
+            self.dashboard.set_stage(3, "Final Synthesis")
         stage3_result = await self.stage3_synthesize_final(
             user_query, stage1_results, stage2_results, use_code_synthesis=use_worktrees
         )

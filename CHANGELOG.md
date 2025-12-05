@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-12-06
+
+### Added
+- **TUI Dashboard** (`--dashboard` / `-d`)
+  - Real-time monitoring of council sessions with Rich-based TUI
+  - Stage flow visualization: `[1] Responses ━━▶ [2] Rankings ━━▶ [3] Synthesis`
+  - Active stage highlighted with color (yellow on blue background)
+  - Completed stages shown in green with checkmark
+  - Member status panel with real-time icons (🟢 Active, ⏳ Waiting, ✅ Completed, ❌ Error)
+  - Live logs panel showing latest 15 entries (scrolling, newest at bottom)
+  - Statistics panel with API call count, errors, and log count
+  - Dynamic layout adapting to member count
+  - Countdown timer on completion before auto-close
+
+- **Dashboard Configuration**
+  - `DASHBOARD_TIMEOUT`: Seconds to display dashboard after completion (default: 5)
+  - `DASHBOARD_REFRESH_RATE`: Dashboard refresh rate in Hz (default: 10)
+
+### Changed
+- Updated README.md, README.ja.md, SKILL.md with dashboard documentation
+- Added `dashboard.py` to project structure
+- Added `rich>=13.0.0` to dependencies
+
 ## [1.0.0] - 2025-12-06
 
 ### Added

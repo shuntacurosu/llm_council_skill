@@ -23,8 +23,25 @@ LLM Council organizes multiple LLMs as a "council" instead of querying a single 
 - **Anonymous Review**: Member identities are anonymized in Stage 2 for fair evaluation
 - **OpenCode CLI Integration**: Generate and edit code directly within worktrees
 - **Flexible Configuration**: Freely configure member models and chairman model
-- **Real-time Progress Display**: Show query status for each model in real-time
+- **Real-time Dashboard**: TUI dashboard showing member status, stage progress, and live logs
 - **Conversation History**: Save all council sessions in JSON format
+
+### Dashboard
+
+Monitor council sessions in real-time with the built-in TUI dashboard:
+
+![Dashboard](refs/dashboard.jpg)
+
+The dashboard displays:
+- **Stage Flow**: Visual progress indicator showing current stage (`[1] Responses ━━▶ [2] Rankings ━━▶ [3] Synthesis`)
+- **Member Status**: Real-time status of each council member (🟢 Active, ⏳ Waiting, ✅ Completed, ❌ Error)
+- **Live Logs**: Latest 15 log entries scrolling in real-time
+- **Statistics**: API call count, errors, and session info
+
+Enable with `--dashboard` or `-d` flag:
+```bash
+python scripts/run.py cli.py --dashboard "Your question"
+```
 
 ## Setup
 
@@ -53,6 +70,10 @@ CHAIRMAN_MODEL=opencode/anthropic/claude-3-5-sonnet
 
 # Title Generation Model - for conversation titles (optional, defaults to CHAIRMAN_MODEL)
 # TITLE_MODEL=opencode/anthropic/claude-3-5-haiku-20241022
+
+# Dashboard Settings (optional)
+DASHBOARD_TIMEOUT=5       # Seconds to show dashboard after completion
+DASHBOARD_REFRESH_RATE=10 # Dashboard refresh rate in Hz
 ```
 
 ### About OpenCode CLI
@@ -98,6 +119,7 @@ python scripts/run.py council_skill.py "What is the best approach to implement c
 | Option | Description | Example |
 |--------|-------------|---------|
 | `query` | Question to send to the council (positional) | `"Your question"` |
+| `--dashboard`, `-d` | Enable TUI dashboard for real-time monitoring | `--dashboard` |
 | `--worktrees` | Enable Git worktree mode | `--worktrees` |
 | `--list` | Show conversation history | `--list` |
 | `--show N` | Show details of conversation N | `--show 1` |
@@ -168,6 +190,7 @@ llm_council/
 │   ├── cli.py                 # CLI interface
 │   ├── config.py              # Configuration management
 │   ├── council.py             # 3-stage council logic
+│   ├── dashboard.py           # TUI dashboard (Rich-based)
 │   ├── worktree_manager.py    # Git worktree management
 │   ├── unified_client.py      # Unified LLM client
 │   ├── opencode_client.py     # OpenCode CLI client
@@ -267,5 +290,6 @@ This project is inspired by [Andrej Karpathy's llm-council](https://github.com/k
 
 - [x] ~~OpenCode tool integration (command-based LLM interface)~~
 - [x] ~~Real-time progress display~~
+- [x] ~~TUI Dashboard with Rich~~
 - [ ] More detailed member settings (temperature parameters, expertise areas, etc.)
-- [ ] Webインターフェースの再実装(オプション)
+- [ ] Web interface (optional)

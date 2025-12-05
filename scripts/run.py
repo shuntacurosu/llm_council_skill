@@ -50,12 +50,15 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python run.py <script_name> [args...]")
         print("\nAvailable scripts:")
-        print("  council_skill.py     - Run LLM Council on a query")
+        print("  cli.py               - Run LLM Council on a query")
+        print("  dashboard.py         - Run dashboard demo")
         print("  setup_environment.py - Set up the virtual environment")
         print("\nExamples:")
-        print("  python run.py council_skill.py \"What is the best approach?\"")
-        print("  python run.py council_skill.py --list")
-        print("  python run.py council_skill.py --setup")
+        print("  python run.py cli.py \"What is the best approach?\"")
+        print("  python run.py cli.py --dashboard \"Your question\"")
+        print("  python run.py cli.py --list")
+        print("  python run.py cli.py --setup")
+        print("  python run.py dashboard.py  # Run demo")
         sys.exit(1)
 
     script_name = sys.argv[1]

@@ -7,6 +7,7 @@ Uses the API layer for all operations.
 
 import sys
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any
 
@@ -193,6 +194,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("query", nargs="?", help="Query to send to the council")
     parser.add_argument("--worktrees", action="store_true", 
                         help="Use git worktrees for code work")
+    parser.add_argument("--dashboard", "-d", action="store_true",
+                        help="Show live TUI dashboard during execution")
     parser.add_argument("--list", action="store_true", 
                         help="List conversation history")
     parser.add_argument("--show", type=int, metavar="N", 
@@ -223,7 +226,7 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     
-    # Initialize API
+    # Initialize API (will be recreated with dashboard if needed)
     api = CouncilAPI()
     
     # Handle --setup
@@ -299,15 +302,80 @@ def main():
     
     # Run the council
     try:
-        logger.info("Running LLM Council...")
-        logger.info("This may take a minute as multiple models are queried in parallel.\n")
+        # Set up dashboard if requested
+        dashboard = None
+        dashboard_config = None
+        if args.dashboard:
+            try:
+                from dashboard import CouncilDashboard, create_dashboard_sink
+                from config import get_config
+                # Use the same logger instance that other modules use
+                from logger import logger as shared_logger, LOGS_DIR
+                
+                dashboard_config = get_config()
+                dashboard = CouncilDashboard()
+                
+                # Remove ALL existing handlers (including those from logger.py setup)
+                shared_logger.remove()
+                
+                # Re-add file handler only (no console to avoid dashboard interference)
+                shared_logger.add(
+                    LOGS_DIR / "council_{time:YYYY-MM-DD}.log",
+                    level="DEBUG",
+                    format="{time:HH:mm:ss} | {level:<8} | {message}",
+                    rotation="1 day",
+                    retention="7 days",
+                    filter=lambda record: "member_log" not in record["extra"],
+                    enqueue=False  # Synchronous logging
+                )
+                
+                # Add dashboard as a log sink (synchronous to avoid delay)
+                shared_logger.add(
+                    create_dashboard_sink(dashboard),
+                    level="INFO",
+                    filter=lambda record: "member_log" not in record["extra"],
+                    enqueue=False  # Ensure logs appear immediately
+                )
+            except ImportError:
+                logger.warning("Dashboard requires 'rich' package. Install with: pip install rich")
+                dashboard = None
+        else:
+            logger.info("Running LLM Council...")
+            logger.info("This may take a minute as multiple models are queried in parallel.\n")
         
-        results = api.run_council(
-            args.query,
-            use_worktrees=use_worktrees,
-            conversation_id=conversation_id,
-            merge_options=merge_options
-        )
+        # Initialize API with dashboard
+        api = CouncilAPI()
+        if dashboard:
+            api.set_dashboard(dashboard)
+            # Start session on dashboard
+            session_id = f"session_{int(datetime.now().timestamp())}"
+            dashboard.start_session(session_id, args.query)
+        
+        if dashboard:
+            # Start with configured refresh rate
+            refresh_rate = dashboard_config.dashboard_refresh_rate if dashboard_config else 10.0
+            dashboard.start(refresh_rate=refresh_rate)
+            try:
+                results = api.run_council(
+                    args.query,
+                    use_worktrees=use_worktrees,
+                    conversation_id=conversation_id,
+                    merge_options=merge_options
+                )
+                dashboard.complete_session(success='error' not in results)
+                
+                # Countdown before closing dashboard
+                timeout = dashboard_config.dashboard_timeout if dashboard_config else 5
+                dashboard.countdown_and_close(timeout)
+            finally:
+                dashboard.stop()
+        else:
+            results = api.run_council(
+                args.query,
+                use_worktrees=use_worktrees,
+                conversation_id=conversation_id,
+                merge_options=merge_options
+            )
         
         formatted = format_results(results)
         print(formatted)

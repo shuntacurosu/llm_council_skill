@@ -104,6 +104,10 @@ class Config:
             "model": title_model,
             "full_name": title_model_str
         }
+        
+        # Dashboard settings
+        self.dashboard_timeout = int(os.getenv("DASHBOARD_TIMEOUT", "5"))
+        self.dashboard_refresh_rate = float(os.getenv("DASHBOARD_REFRESH_RATE", "10"))
     
     @property
     def council_member_count(self) -> int:

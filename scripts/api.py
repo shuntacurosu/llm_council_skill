@@ -9,7 +9,7 @@ import uuid
 import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List, Callable, TYPE_CHECKING
 from pathlib import Path
 from datetime import datetime
 
@@ -17,6 +17,9 @@ from logger import logger
 from config import get_config
 from council import CouncilOrchestrator
 from storage import ConversationStorage
+
+if TYPE_CHECKING:
+    from dashboard import CouncilDashboard
 
 
 class SessionStatus(Enum):
@@ -63,13 +66,14 @@ class CouncilAPI:
     This class provides a clean interface suitable for both CLI and web use.
     """
     
-    def __init__(self, repo_root: Optional[Path] = None):
+    def __init__(self, repo_root: Optional[Path] = None, dashboard: Optional["CouncilDashboard"] = None):
         """
         Initialize the Council API.
         
         Args:
             repo_root: Root directory of the git repository. If None, uses
                       the parent of the scripts directory.
+            dashboard: Optional dashboard for live updates
         """
         if repo_root is None:
             repo_root = Path(__file__).parent.parent
@@ -80,12 +84,19 @@ class CouncilAPI:
         self._orchestrator: Optional[CouncilOrchestrator] = None
         self._current_session: Optional[SessionProgress] = None
         self._progress_callbacks: List[Callable[[SessionProgress], None]] = []
+        self._dashboard: Optional["CouncilDashboard"] = dashboard
+    
+    def set_dashboard(self, dashboard: Optional["CouncilDashboard"]) -> None:
+        """Set the dashboard for live updates."""
+        self._dashboard = dashboard
+        if self._orchestrator:
+            self._orchestrator.set_dashboard(dashboard)
     
     @property
     def orchestrator(self) -> CouncilOrchestrator:
         """Lazy initialization of orchestrator."""
         if self._orchestrator is None:
-            self._orchestrator = CouncilOrchestrator(self.repo_root)
+            self._orchestrator = CouncilOrchestrator(self.repo_root, dashboard=self._dashboard)
         return self._orchestrator
     
     # =========================================================================

@@ -23,8 +23,25 @@ LLM Councilは、単一のLLMに質問するのではなく、複数のLLMを「
 - **匿名レビュー**: Stage 2では議員の身元を匿名化して公平なレビューを実現
 - **OpenCode CLI統合**: ワークツリー内でコードを直接生成・編集
 - **柔軟な設定**: 議員モデルと議長モデルを自由に設定可能
-- **リアルタイム進捗表示**: 各モデルのクエリ状態をリアルタイムで表示
+- **リアルタイムダッシュボード**: TUIダッシュボードで議員状態、ステージ進捗、ログをリアルタイム表示
 - **会話履歴管理**: 全ての評議会セッションをJSON形式で保存
+
+### ダッシュボード
+
+内蔵のTUIダッシュボードで評議会セッションをリアルタイムに監視できます：
+
+![Dashboard](refs/dashboard.jpg)
+
+ダッシュボードの表示内容：
+- **ステージフロー**: 現在のステージを視覚的に表示（`[1] Responses ━━▶ [2] Rankings ━━▶ [3] Synthesis`）
+- **議員ステータス**: 各議員のリアルタイム状態（🟢 アクティブ、⏳ 待機中、✅ 完了、❌ エラー）
+- **ライブログ**: 最新15件のログをリアルタイムでスクロール表示
+- **統計**: API呼び出し回数、エラー数、セッション情報
+
+`--dashboard`または`-d`フラグで有効化：
+```bash
+python scripts/run.py cli.py --dashboard "質問"
+```
 
 ## セットアップ
 
@@ -53,6 +70,10 @@ CHAIRMAN_MODEL=opencode/anthropic/claude-3-5-sonnet
 
 # Title Generation Model - 会話タイトル生成用 (オプション、デフォルトはCHAIRMAN_MODEL)
 # TITLE_MODEL=opencode/anthropic/claude-3-5-haiku-20241022
+
+# ダッシュボード設定（オプション）
+DASHBOARD_TIMEOUT=5       # 完了後にダッシュボードを表示する秒数
+DASHBOARD_REFRESH_RATE=10 # ダッシュボードのリフレッシュレート（Hz）
 ```
 
 ### OpenCode CLIについて
@@ -98,6 +119,7 @@ python scripts/run.py council_skill.py "Webアプリケーションにキャッ�
 | オプション | 説明 | 例 |
 |------------|------|-----|
 | `query` | 評議会に送る質問（位置引数） | `"質問内容"` |
+| `--dashboard`, `-d` | リアルタイム監視用TUIダッシュボードを有効化 | `--dashboard` |
 | `--worktrees` | Git worktreeモードを有効化 | `--worktrees` |
 | `--list` | 会話履歴の一覧を表示 | `--list` |
 | `--show N` | 会話Nの詳細を表示 | `--show 1` |
@@ -168,6 +190,7 @@ llm_council/
 │   ├── cli.py                 # CLIインターフェース
 │   ├── config.py              # 設定管理
 │   ├── council.py             # 3段階評議会ロジック
+│   ├── dashboard.py           # TUIダッシュボード（Rich使用）
 │   ├── worktree_manager.py    # Git worktree管理
 │   ├── unified_client.py      # 統合LLMクライアント
 │   ├── opencode_client.py     # OpenCode CLIクライアント
@@ -267,5 +290,6 @@ MIT License
 
 - [x] ~~Opencodeツールとの統合(コマンドベースのLLMインターフェース)~~
 - [x] ~~リアルタイム進捗表示~~
+- [x] ~~TUIダッシュボード（Rich使用）~~
 - [ ] より詳細な議員設定(温度パラメータ、専門分野など)
 - [ ] Webインターフェースの再実装(オプション)
