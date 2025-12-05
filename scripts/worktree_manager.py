@@ -7,6 +7,8 @@ from typing import List, Dict, Optional, Tuple
 import hashlib
 import re
 
+from logger import logger
+
 
 class WorktreeManager:
     """Manages git worktrees for council members."""
@@ -310,7 +312,7 @@ class WorktreeManager:
         This should be called at the beginning of each council session
         to ensure a clean state regardless of previous interruptions.
         """
-        print("  Preparing fresh worktrees...", flush=True)
+        logger.info("  Preparing fresh worktrees...")
         
         # Clean up all existing worktrees
         self.cleanup_all_worktrees()
@@ -318,7 +320,7 @@ class WorktreeManager:
         # Sync with parent tree (pull latest changes)
         self._sync_with_parent()
         
-        print("  ✓ Worktrees ready", flush=True)
+        logger.success("  ✓ Worktrees ready")
     
     def _sync_with_parent(self):
         """Sync the main repository with any upstream changes."""

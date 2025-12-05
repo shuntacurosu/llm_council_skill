@@ -15,6 +15,7 @@ from typing import Dict, Any, Optional
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+from logger import logger
 from config import get_config
 from council import CouncilOrchestrator
 from storage import ConversationStorage
@@ -156,7 +157,7 @@ def main():
     args = parser.parse_args()
     
     if args.setup:
-        print("""
+        logger.info("""
 LLM Council Setup Instructions:
 
 1. Create a .env file in the scripts/ directory:
@@ -171,7 +172,7 @@ LLM Council Setup Instructions:
    CHAIRMAN_MODEL=anthropic/claude-3-5-sonnet-20241022
 
 4. Install dependencies:
-   pip install httpx python-dotenv
+   pip install httpx python-dotenv loguru
 
 5. Run the council:
    python council_skill.py "Your query here"
@@ -186,34 +187,37 @@ For more information, see README.md
         conversations = storage.list_conversations()
         
         if not conversations:
-            print("No conversations found.")
+            logger.info("No conversations found.")
         else:
-            print("\nConversation History:")
-            print("-" * 80)
+            logger.info("\nConversation History:")
+            logger.info("-" * 80)
             for conv in conversations:
-                print(f"ID: {conv['id']}")
-                print(f"Title: {conv['title']}")
-                print(f"Created: {conv['created_at']}")
-                print(f"Sessions: {conv['session_count']}")
-                print("-" * 80)
+                logger.info(f"ID: {conv['id']}")
+                logger.info(f"Title: {conv['title']}")
+                logger.info(f"Created: {conv['created_at']}")
+                logger.info(f"Sessions: {conv['session_count']}")
+                logger.info("-" * 80)
         return
     
     if not args.query:
-        print("Error: Please provide a query or use --setup for setup instructions")
+        logger.error("Error: Please provide a query or use --setup for setup instructions")
         parser.print_help()
         return
     
     try:
-        print("Running LLM Council...")
-        print("This may take a minute as multiple models are queried in parallel.\n")
+        logger.info("Running LLM Council...")
+        logger.info("This may take a minute as multiple models are queried in parallel.\n")
         
         results = run_council(args.query, use_worktrees=args.worktrees)
         
         formatted = format_results(results)
         print(formatted)
         
+        # Log completion
+        logger.success("Council session complete. Check scripts/logs/ for detailed logs.")
+        
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

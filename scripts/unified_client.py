@@ -4,6 +4,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
+from logger import logger, get_member_logger
 from openrouter_client import OpenRouterClient
 from opencode_client import OpenCodeClient
 
@@ -63,11 +64,18 @@ class UnifiedLLMClient:
         model = member["model"]
         full_name = member["full_name"]
         
-        print(f"  → Querying {full_name}...", flush=True)
+        logger.info(f"  → Querying {full_name}...")
+        
+        # Get member-specific logger for detailed logging
+        member_id = f"member_{hash(full_name) % 1000}"
+        member_logger = get_member_logger(member_id, full_name)
+        member_logger.info(f"Starting query for {full_name}")
+        member_logger.debug(f"Provider: {provider}, Model: {model}")
         
         if provider == "openrouter":
             if not self.openrouter_client:
-                print(f"OpenRouter client not initialized (no API key)")
+                logger.error(f"OpenRouter client not initialized (no API key)")
+                member_logger.error("OpenRouter client not initialized")
                 return None
             
             response = await self.openrouter_client.query_model(
@@ -78,9 +86,12 @@ class UnifiedLLMClient:
             
             if response:
                 response["full_name"] = full_name
-                print(f"  ✓ {full_name} completed", flush=True)
+                logger.success(f"  ✓ {full_name} completed")
+                member_logger.success(f"Query completed successfully")
+                member_logger.debug(f"Response length: {len(response.get('content', ''))} chars")
             else:
-                print(f"  ✗ {full_name} failed", flush=True)
+                logger.warning(f"  ✗ {full_name} failed")
+                member_logger.error("Query failed - no response")
             return response
             
         elif provider == "opencode":
@@ -96,13 +107,16 @@ class UnifiedLLMClient:
             
             if response:
                 response["full_name"] = full_name
-                print(f"  ✓ {full_name} completed", flush=True)
+                logger.success(f"  ✓ {full_name} completed")
+                member_logger.success(f"Query completed successfully")
+                member_logger.debug(f"Response length: {len(response.get('content', ''))} chars")
             else:
-                print(f"  ✗ {full_name} failed", flush=True)
+                logger.warning(f"  ✗ {full_name} failed")
+                member_logger.error("Query failed - no response")
             return response
             
         else:
-            print(f"Unknown provider: {provider}")
+            logger.error(f"Unknown provider: {provider}")
             return None
     
     def _messages_to_prompt(self, messages: List[Dict[str, str]]) -> str:

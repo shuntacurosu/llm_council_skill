@@ -125,7 +125,7 @@ class ConversationStorage:
                         "session_count": len(data.get("sessions", []))
                     })
             except Exception as e:
-                print(f"Error loading conversation {path}: {e}")
+                pass  # Silently skip corrupted files
         
         # Sort by created_at (newest first)
         conversations.sort(key=lambda x: x["created_at"], reverse=True)

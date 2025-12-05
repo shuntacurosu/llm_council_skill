@@ -4,6 +4,8 @@ import httpx
 import asyncio
 from typing import List, Dict, Any, Optional
 
+from logger import logger
+
 
 class OpenRouterClient:
     """Client for interacting with OpenRouter API."""
@@ -71,13 +73,13 @@ class OpenRouterClient:
                 }
         
         except httpx.TimeoutException:
-            print(f"Timeout querying model {model}")
+            logger.error(f"Timeout querying model {model}")
             return None
         except httpx.HTTPStatusError as e:
-            print(f"HTTP error querying model {model}: {e.response.status_code}")
+            logger.error(f"HTTP error querying model {model}: {e.response.status_code}")
             return None
         except Exception as e:
-            print(f"Error querying model {model}: {e}")
+            logger.error(f"Error querying model {model}: {e}")
             return None
     
     async def query_models_parallel(

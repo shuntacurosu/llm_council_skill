@@ -5,6 +5,7 @@ import asyncio
 from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 
+from logger import logger, get_stage_logger
 from config import get_config
 from unified_client import UnifiedLLMClient
 from worktree_manager import WorktreeManager
@@ -73,7 +74,7 @@ class CouncilOrchestrator:
                     worktree_paths[i] = (member_id, worktree_path)
                     working_dirs[i] = worktree_path
                 except Exception as e:
-                    print(f"Failed to create worktree for {member['full_name']}: {e}")
+                    logger.error(f"Failed to create worktree for {member['full_name']}: {e}")
         
         # Prepare messages
         messages = [{"role": "user", "content": user_query}]
@@ -108,7 +109,7 @@ class CouncilOrchestrator:
                     if diff:
                         result["diff"] = diff
                 except Exception as e:
-                    print(f"Failed to get diff for {member_id}: {e}")
+                    logger.warning(f"Failed to get diff for {member_id}: {e}")
             
             stage1_results.append(result)
         
@@ -343,11 +344,14 @@ class CouncilOrchestrator:
             try:
                 self.worktree_manager.prepare_fresh_worktrees()
             except Exception as e:
-                print(f"Warning: Failed to prepare worktrees: {e}")
+                logger.warning(f"Failed to prepare worktrees: {e}")
         
         # Stage 1: Collect individual responses
-        print("Stage 1: Collecting individual responses...", flush=True)
+        stage1_logger = get_stage_logger("stage1")
+        logger.info("Stage 1: Collecting individual responses...")
+        stage1_logger.info("Starting Stage 1")
         stage1_results = await self.stage1_collect_responses(user_query, use_worktrees)
+        stage1_logger.info(f"Stage 1 complete: {len(stage1_results)} responses")
         
         if not stage1_results:
             return {
@@ -358,12 +362,15 @@ class CouncilOrchestrator:
             }
         
         # Stage 2: Collect peer rankings
-        print("Stage 2: Collecting peer rankings...", flush=True)
+        stage2_logger = get_stage_logger("stage2")
+        logger.info("Stage 2: Collecting peer rankings...")
+        stage2_logger.info("Starting Stage 2")
         stage2_results, label_to_model = await self.stage2_collect_rankings(
             user_query,
             stage1_results,
             use_diffs=use_worktrees
         )
+        stage2_logger.info(f"Stage 2 complete: {len(stage2_results)} rankings")
         
         # Calculate aggregate rankings
         aggregate_rankings = self.calculate_aggregate_rankings(
@@ -372,22 +379,25 @@ class CouncilOrchestrator:
         )
         
         # Stage 3: Chairman synthesis
-        print("Stage 3: Synthesizing final response...", flush=True)
+        stage3_logger = get_stage_logger("stage3")
+        logger.info("Stage 3: Synthesizing final response...")
+        stage3_logger.info("Starting Stage 3")
         stage3_result = await self.stage3_synthesize_final(
             user_query,
             stage1_results,
             stage2_results,
             use_code_synthesis=use_worktrees
         )
+        stage3_logger.info("Stage 3 complete")
         
         # Cleanup worktrees after completion
         if use_worktrees:
-            print("Cleaning up worktrees...", flush=True)
+            logger.info("Cleaning up worktrees...")
             try:
                 self.worktree_manager.cleanup_all_worktrees()
-                print("  ✓ Cleanup complete", flush=True)
+                logger.success("  ✓ Cleanup complete")
             except Exception as e:
-                print(f"  ✗ Warning: Failed to cleanup worktrees: {e}")
+                logger.warning(f"  ✗ Failed to cleanup worktrees: {e}")
         
         return {
             "query": user_query,

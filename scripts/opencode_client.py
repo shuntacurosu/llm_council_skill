@@ -7,6 +7,8 @@ import os
 from typing import Optional, Dict, Any
 from pathlib import Path
 
+from logger import logger
+
 
 class OpenCodeClient:
     """Client for interacting with OpenCode CLI."""
@@ -92,7 +94,7 @@ class OpenCodeClient:
             
             if process.returncode != 0:
                 error_msg = stderr.decode('utf-8', errors='replace')
-                print(f"OpenCode error for model {model}: {error_msg[:200]}")
+                logger.error(f"OpenCode error for model {model}: {error_msg[:200]}")
                 return None
             
             content = stdout.decode('utf-8', errors='replace')
@@ -103,13 +105,13 @@ class OpenCodeClient:
             }
             
         except asyncio.TimeoutError:
-            print(f"Timeout querying model {model} via OpenCode")
+            logger.error(f"Timeout querying model {model} via OpenCode")
             return None
         except FileNotFoundError:
-            print(f"OpenCode CLI not found. Please install opencode: npm install -g opencode-ai")
+            logger.error(f"OpenCode CLI not found. Please install opencode: npm install -g opencode-ai")
             return None
         except Exception as e:
-            print(f"Error querying model {model} via OpenCode: {e}")
+            logger.error(f"Error querying model {model} via OpenCode: {e}")
             return None
     
     async def query_model_in_worktree(

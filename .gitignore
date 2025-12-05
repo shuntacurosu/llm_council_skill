@@ -14,3 +14,6 @@ scripts/conversations/*.json
 
 # Worktrees
 scripts/worktrees/
+
+# Logs
+scripts/logs/
