@@ -122,20 +122,24 @@ class WorktreeManager:
 
     def get_worktree_diff(self, member_id: str) -> str:
         """
-        Get the diff of changes in a worktree.
+        Get the diff of changes in a worktree, including new (untracked) files.
 
         Args:
             member_id: Unique identifier for the council member
 
         Returns:
-            Git diff output
+            Git diff output including new files
         """
         worktree_path = self.worktrees_dir / member_id
 
         if not worktree_path.exists():
             raise ValueError(f"Worktree for {member_id} does not exist")
 
-        # Get diff of all changes (staged and unstaged)
+        # First, add all untracked files to the index with --intent-to-add
+        # This allows git diff to show new files without actually staging them
+        self._run_git_command(["add", "-N", "."], cwd=worktree_path)
+
+        # Get diff of all changes (staged, unstaged, and newly tracked files)
         returncode, stdout, stderr = self._run_git_command(
             ["diff", "HEAD"], cwd=worktree_path
         )
