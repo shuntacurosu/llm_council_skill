@@ -17,14 +17,16 @@ LLM Councilは、単一のLLMに質問するのではなく、複数のLLMを「
 
 - **Git Worktree統合**: 各議員の作業を独立したgit worktreeで管理
 - **匿名レビュー**: Stage 2では議員の身元を匿名化して公平なレビューを実現
+- **マルチプロバイダー対応**: OpenRouter APIとOpenCode CLIの両方に対応
 - **柔軟な設定**: 議員モデルと議長モデルを自由に設定可能
+- **リアルタイム進捗表示**: 各モデルのクエリ状態をリアルタイムで表示
 - **会話履歴管理**: 全ての評議会セッションをJSON形式で保存
 
 ## セットアップ
 
 ### 1. 環境変数の設定
 
-`scripts/.env`ファイルを作成し、OpenRouter APIキーと使用するモデルを設定します:
+`scripts/.env`ファイルを作成し、使用するモデルを設定します:
 
 ```bash
 cd scripts
@@ -34,14 +36,33 @@ cp .env.example .env
 `.env`ファイルを編集:
 
 ```env
-# OpenRouter API Configuration
+# OpenRouter API Configuration (openrouterプロバイダー使用時のみ必要)
 OPENROUTER_API_KEY=sk-or-v1-your-api-key-here
 
-# Council Members - カンマ区切りのモデルリスト
-COUNCIL_MODELS=openai/gpt-4,google/gemini-pro,anthropic/claude-3-5-sonnet-20241022,x-ai/grok-beta
+# Council Members - カンマ区切りのprovider/modelリスト
+# 形式:
+#   openrouter/provider/model - OpenRouter API経由 (例: openrouter/openai/gpt-4)
+#   opencode/provider/model - OpenCode CLI経由 (例: opencode/openrouter/openai/gpt-4)
+COUNCIL_MODELS=opencode/openrouter/openai/gpt-4,opencode/openrouter/anthropic/claude-3-5-sonnet,opencode/openrouter/google/gemini-pro
 
 # Chairman Model - 最終統合を行うモデル
-CHAIRMAN_MODEL=anthropic/claude-3-5-sonnet-20241022
+CHAIRMAN_MODEL=opencode/openrouter/anthropic/claude-3-5-sonnet
+```
+
+### プロバイダーについて
+
+| プロバイダー | 説明 | 必要な設定 |
+|------------|------|-----------|
+| `openrouter` | OpenRouter API経由でLLMにアクセス | `OPENROUTER_API_KEY` |
+| `opencode` | OpenCode CLI経由でLLMにアクセス | [OpenCode](https://github.com/sst/opencode)のインストール |
+
+**OpenCode使用時の例:**
+```env
+# OpenCode経由でOpenRouterのモデルを使用
+COUNCIL_MODELS=opencode/openrouter/openai/gpt-4,opencode/openrouter/anthropic/claude-3-5-sonnet
+
+# OpenRouter API直接使用
+COUNCIL_MODELS=openrouter/openai/gpt-4,openrouter/anthropic/claude-3-5-sonnet
 ```
 
 APIキーは[OpenRouter](https://openrouter.ai/)で取得できます。
@@ -120,7 +141,9 @@ llm_council/
 │   ├── config.py              # 設定管理
 │   ├── council.py             # 3段階評議会ロジック
 │   ├── worktree_manager.py    # Git worktree管理
+│   ├── unified_client.py      # 統合LLMクライアント
 │   ├── openrouter_client.py   # OpenRouter APIクライアント
+│   ├── opencode_client.py     # OpenCode CLIクライアント
 │   ├── storage.py             # 会話履歴保存
 │   ├── .env                   # 環境変数(作成が必要)
 │   ├── .env.example           # 環境変数テンプレート
@@ -166,7 +189,11 @@ llm_council/
 `scripts/.env`の`COUNCIL_MODELS`を編集:
 
 ```env
-COUNCIL_MODELS=openai/gpt-4-turbo,anthropic/claude-3-opus,google/gemini-pro
+# OpenCode経由
+COUNCIL_MODELS=opencode/openrouter/openai/gpt-4-turbo,opencode/openrouter/anthropic/claude-3-opus,opencode/openrouter/google/gemini-pro
+
+# OpenRouter API直接
+COUNCIL_MODELS=openrouter/openai/gpt-4-turbo,openrouter/anthropic/claude-3-opus,openrouter/google/gemini-pro
 ```
 
 ### 議長モデルの変更
@@ -174,7 +201,7 @@ COUNCIL_MODELS=openai/gpt-4-turbo,anthropic/claude-3-opus,google/gemini-pro
 `scripts/.env`の`CHAIRMAN_MODEL`を編集:
 
 ```env
-CHAIRMAN_MODEL=anthropic/claude-3-5-sonnet-20241022
+CHAIRMAN_MODEL=opencode/openrouter/anthropic/claude-3-5-sonnet
 ```
 
 ### プロンプトのカスタマイズ
@@ -216,7 +243,7 @@ MIT License
 
 ## 今後の拡張予定
 
-- [ ] Opencodeツールとの統合(コマンドベースのLLMインターフェース)
+- [x] ~~Opencodeツールとの統合(コマンドベースのLLMインターフェース)~~
+- [x] ~~リアルタイム進捗表示~~
 - [ ] より詳細な議員設定(温度パラメータ、専門分野など)
-- [ ] リアルタイム進捗表示
 - [ ] Webインターフェースの再実装(オプション)
