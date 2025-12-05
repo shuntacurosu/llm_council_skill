@@ -47,7 +47,8 @@ class CouncilOrchestrator:
     async def stage1_collect_responses(
         self,
         user_query: str,
-        use_worktrees: bool = False
+        use_worktrees: bool = False,
+        context_messages: List[Dict[str, str]] = None
     ) -> List[Dict[str, Any]]:
         """
         Stage 1: Collect individual responses from all council models.
@@ -55,10 +56,14 @@ class CouncilOrchestrator:
         Args:
             user_query: The user's question or request
             use_worktrees: Whether to create worktrees for code work
+            context_messages: Previous conversation messages for context
             
         Returns:
             List of dicts with 'model', 'response', and optionally 'worktree_path', 'diff'
         """
+        if context_messages is None:
+            context_messages = []
+        
         members = self.config.get_council_members()
         
         # Prepare worktrees if needed (use index as key to handle duplicate models)
@@ -76,8 +81,9 @@ class CouncilOrchestrator:
                 except Exception as e:
                     logger.error(f"Failed to create worktree for {member['full_name']}: {e}")
         
-        # Prepare messages
-        messages = [{"role": "user", "content": user_query}]
+        # Prepare messages with context
+        messages = context_messages.copy()
+        messages.append({"role": "user", "content": user_query})
         
         # Query all members in parallel using unified client
         responses = await self.client.query_members_parallel(
@@ -326,7 +332,8 @@ class CouncilOrchestrator:
     async def run_full_council(
         self,
         user_query: str,
-        use_worktrees: bool = False
+        use_worktrees: bool = False,
+        context_messages: List[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
         Run the complete 3-stage council process.
@@ -334,10 +341,14 @@ class CouncilOrchestrator:
         Args:
             user_query: The user's question or request
             use_worktrees: Whether to use git worktrees for code work
+            context_messages: Previous conversation messages for context
             
         Returns:
             Complete council results with all stages
         """
+        if context_messages is None:
+            context_messages = []
+        
         # Clean up any existing worktrees at the start of each session
         # This ensures a fresh start regardless of previous interruptions
         if use_worktrees:
@@ -350,7 +361,11 @@ class CouncilOrchestrator:
         stage1_logger = get_stage_logger("stage1")
         logger.info("Stage 1: Collecting individual responses...")
         stage1_logger.info("Starting Stage 1")
-        stage1_results = await self.stage1_collect_responses(user_query, use_worktrees)
+        stage1_results = await self.stage1_collect_responses(
+            user_query, 
+            use_worktrees,
+            context_messages=context_messages
+        )
         stage1_logger.info(f"Stage 1 complete: {len(stage1_results)} responses")
         
         if not stage1_results:
