@@ -159,16 +159,21 @@ llm_council/
 │   ├── __init__.py
 │   ├── run.py                 # 仮想環境経由でスクリプトを実行
 │   ├── setup_environment.py   # 仮想環境セットアップ
-│   ├── council_skill.py       # メインエントリーポイント
+│   ├── council_skill.py       # メインエントリーポイント（後方互換）
+│   ├── api.py                 # 高レベルAPI（ダッシュボード向け）
+│   ├── cli.py                 # CLIインターフェース
 │   ├── config.py              # 設定管理
 │   ├── council.py             # 3段階評議会ロジック
 │   ├── worktree_manager.py    # Git worktree管理
 │   ├── unified_client.py      # 統合LLMクライアント
 │   ├── opencode_client.py     # OpenCode CLIクライアント
 │   ├── storage.py             # 会話履歴保存
+│   ├── logger.py              # ログ設定
 │   ├── .env                   # 環境変数(作成が必要)
 │   ├── .env.example           # 環境変数テンプレート
-│   ├── conversations/         # 会話履歴保存ディレクトリ
+│   ├── data/
+│   │   ├── conversations/     # 会話履歴JSON
+│   │   └── logs/              # 実行ログ
 │   ├── prompts/
 │   │   └── templates.py       # プロンプトテンプレート
 │   └── worktrees/             # Git worktreeディレクトリ

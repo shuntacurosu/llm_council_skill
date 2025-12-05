@@ -3,388 +3,56 @@ LLM Council - Claude Skill
 
 A Claude Skill that orchestrates multiple LLMs to collectively analyze and respond to queries.
 Uses git worktrees to manage individual council member work and anonymized peer review.
+
+This module provides backward compatibility. The implementation has been refactored into:
+- api.py: High-level API for programmatic access
+- cli.py: Command-line interface
+
+For programmatic use, import from api.py:
+    from api import CouncilAPI, MergeOptions
+    
+    api = CouncilAPI()
+    results = api.run_council("Your query here")
 """
 
 import sys
-import asyncio
-import uuid
 from pathlib import Path
-from typing import Dict, Any, Optional
 
 # Add scripts directory to path
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from logger import logger
-from config import get_config
-from council import CouncilOrchestrator
-from storage import ConversationStorage
+# Re-export main components for backward compatibility
+from api import CouncilAPI, MergeOptions, SessionProgress, SessionStatus, get_api
+from cli import format_results, main
 
-
-def run_council(
-    query: str, 
-    use_worktrees: bool = False,
-    conversation_id: Optional[str] = None,
-    merge_mode: Optional[str] = None,
-    merge_member: Optional[int] = None,
-    confirm_merge: bool = False,
-    no_commit: bool = False
-) -> Dict[str, Any]:
+# Legacy function for backward compatibility
+def run_council(*args, **kwargs):
     """
     Run the LLM Council on a query.
     
-    Args:
-        query: The user's question or request
-        use_worktrees: Whether to use git worktrees for code work
-        conversation_id: Optional existing conversation ID to continue
-        merge_mode: Merge mode - None, "auto", "manual", or "dry-run"
-        merge_member: Member index to merge (1-based, for manual mode)
-        confirm_merge: Whether to ask for confirmation before merging
-        no_commit: Apply changes without committing (leaves changes as unstaged)
-        
-    Returns:
-        Council results with all stages
+    Deprecated: Use CouncilAPI.run_council() instead.
     """
-    # Get repository root (parent of scripts directory)
-    repo_root = SCRIPTS_DIR.parent
+    api = CouncilAPI()
     
-    # Initialize orchestrator
-    orchestrator = CouncilOrchestrator(repo_root)
+    # Convert old-style arguments to new MergeOptions
+    merge_mode = kwargs.pop('merge_mode', None)
+    merge_member = kwargs.pop('merge_member', None)
+    confirm_merge = kwargs.pop('confirm_merge', False)
+    no_commit = kwargs.pop('no_commit', False)
     
-    # Get conversation history if continuing
-    config = get_config()
-    storage = ConversationStorage(config.conversations_dir)
-    
-    context_messages = []
-    if conversation_id:
-        context_messages = storage.get_conversation_history(conversation_id)
-        if context_messages:
-            logger.info(f"Continuing conversation with {len(context_messages)} previous messages")
-    
-    # Run the council (with context if available)
-    results = asyncio.run(orchestrator.run_full_council(
-        query, 
-        use_worktrees,
-        context_messages=context_messages,
-        merge_mode=merge_mode,
-        merge_member=merge_member,
-        confirm_merge=confirm_merge,
+    merge_options = MergeOptions(
+        mode=merge_mode,
+        member_index=merge_member,
+        confirm=confirm_merge,
         no_commit=no_commit
-    ))
+    )
     
-    # Generate title only for new conversations
-    if conversation_id is None:
-        logger.info("Generating conversation title...")
-        title = asyncio.run(orchestrator.generate_conversation_title(query))
-        logger.info(f"Title: {title}")
-        conversation_id = str(uuid.uuid4())
-        storage.add_session(conversation_id, query, results, title=title)
-    else:
-        # Add session to existing conversation (no title update)
-        storage.add_session(conversation_id, query, results)
-    
-    # Store conversation_id in results for reference
-    results["conversation_id"] = conversation_id
-    
-    return results
-
-
-def format_results(results: Dict[str, Any]) -> str:
-    """
-    Format council results for display.
-    
-    Args:
-        results: Council results from run_council
-        
-    Returns:
-        Formatted string output
-    """
-    output = []
-    
-    output.append("=" * 80)
-    output.append("LLM COUNCIL RESULTS")
-    output.append("=" * 80)
-    
-    # Check for errors
-    if 'error' in results:
-        output.append(f"\nError: {results['error']}")
-        output.append("=" * 80)
-        return "\n".join(output)
-    
-    # Query
-    output.append(f"\nQuery: {results.get('query', 'N/A')}")
-    output.append("")
-    
-    # Stage 1: Individual Responses
-    output.append("-" * 80)
-    output.append("STAGE 1: Individual Council Member Responses")
-    output.append("-" * 80)
-    
-    stage1 = results.get('stage1', [])
-    for i, result in enumerate(stage1, 1):
-        output.append(f"\n[{i}] {result.get('model', 'Unknown')}")
-        output.append("-" * 40)
-        output.append(result.get('response', 'No response'))
-        
-        if 'diff' in result:
-            output.append("\nCode Changes:")
-            output.append(result['diff'][:500] + "..." if len(result['diff']) > 500 else result['diff'])
-        output.append("")
-    
-    # Stage 2: Peer Rankings
-    output.append("-" * 80)
-    output.append("STAGE 2: Peer Rankings")
-    output.append("-" * 80)
-    
-    stage2 = results.get('stage2', [])
-    for i, result in enumerate(stage2, 1):
-        output.append(f"\n[{i}] {result.get('model', 'Unknown')}")
-        output.append("-" * 40)
-        
-        parsed = result.get('parsed_ranking', [])
-        if parsed:
-            output.append("Ranking:")
-            for rank, label in enumerate(parsed, 1):
-                output.append(f"  {rank}. {label}")
-        else:
-            output.append("(Could not parse ranking)")
-        output.append("")
-    
-    # Aggregate Rankings
-    if 'aggregate_rankings' in results and results['aggregate_rankings']:
-        output.append("-" * 80)
-        output.append("AGGREGATE RANKINGS")
-        output.append("-" * 80)
-        
-        label_to_model = results.get('label_to_model', {})
-        for label, score in results['aggregate_rankings']:
-            model = label_to_model.get(label, 'Unknown')
-            output.append(f"{label}: {score:.2f} - {model}")
-        output.append("")
-    
-    # Stage 3: Final Synthesis
-    output.append("-" * 80)
-    output.append("STAGE 3: Chairman's Final Synthesis")
-    output.append("-" * 80)
-    
-    stage3 = results.get('stage3')
-    if stage3:
-        output.append(f"\nChairman Model: {stage3.get('model', 'Unknown')}")
-        output.append("-" * 40)
-        output.append(stage3.get('response', 'No synthesis available'))
-    else:
-        output.append("\nNo synthesis available (council did not return responses)")
-    output.append("")
-    
-    # Merge Result (if applicable)
-    merge_result = results.get('merge_result')
-    if merge_result:
-        output.append("-" * 80)
-        output.append("MERGE RESULT")
-        output.append("-" * 80)
-        
-        status = merge_result.get('status', 'unknown')
-        if status == 'merged':
-            output.append(f"\n✓ Successfully merged changes from {merge_result.get('member', 'Unknown')}")
-        elif status == 'applied':
-            output.append(f"\n✓ Applied changes from {merge_result.get('member', 'Unknown')} (unstaged)")
-            output.append("  Use 'git status' and 'git diff' to review")
-            output.append("  Commit manually when ready")
-        elif status == 'dry_run':
-            output.append(f"\n(Dry run) {merge_result.get('members_with_diffs', 0)} members had code changes")
-        elif status == 'cancelled':
-            output.append("\n✗ Merge cancelled by user")
-        elif status == 'no_changes':
-            output.append("\n(No code changes to merge)")
-        elif status == 'error':
-            output.append(f"\n✗ Merge error: {merge_result.get('message', 'Unknown error')}")
-        output.append("")
-    
-    output.append("=" * 80)
-    
-    return "\n".join(output)
-
-
-def main():
-    """Main entry point for the skill."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="LLM Council - Collective Intelligence Tool")
-    parser.add_argument("query", nargs="?", help="Query to send to the council")
-    parser.add_argument("--worktrees", action="store_true", help="Use git worktrees for code work")
-    parser.add_argument("--list", action="store_true", help="List conversation history")
-    parser.add_argument("--show", type=int, metavar="N", help="Show conversation N (from --list)")
-    parser.add_argument("--continue", dest="continue_conv", type=int, metavar="N", 
-                        help="Continue conversation N with a new query")
-    parser.add_argument("--setup", action="store_true", help="Show setup instructions")
-    
-    # Merge options (require --worktrees)
-    merge_group = parser.add_mutually_exclusive_group()
-    merge_group.add_argument("--auto-merge", action="store_true",
-                             help="Automatically merge the top-ranked proposal")
-    merge_group.add_argument("--merge", type=int, metavar="N",
-                             help="Merge proposal from member N (1-based index)")
-    merge_group.add_argument("--dry-run", action="store_true",
-                             help="Show diffs without merging (implies --worktrees)")
-    parser.add_argument("--confirm", action="store_true",
-                        help="Ask for confirmation before merging")
-    parser.add_argument("--no-commit", action="store_true",
-                        help="Apply changes without committing (leaves changes as unstaged)")
-    
-    args = parser.parse_args()
-    
-    if args.setup:
-        logger.info("""
-LLM Council Setup Instructions:
-
-1. Create a .env file in the scripts/ directory:
-   cd scripts
-   cp .env.example .env
-
-2. Configure council members and chairman model in .env:
-   COUNCIL_MODELS=opencode/openai/gpt-4,opencode/anthropic/claude-3-5-sonnet-20241022,...
-   CHAIRMAN_MODEL=opencode/anthropic/claude-3-5-sonnet-20241022
-   
-   Note: All models use OpenCode CLI. Format is opencode/provider/model
-   You can also omit 'opencode/' prefix as it's the default.
-
-3. Install dependencies:
-   pip install python-dotenv loguru
-
-4. Run the council:
-   python council_skill.py "Your query here"
-
-5. Continue a conversation:
-   python council_skill.py --list
-   python council_skill.py --continue 1 "Follow-up question"
-
-For more information, see README.md
-        """)
-        return
-    
-    config = get_config()
-    storage = ConversationStorage(config.conversations_dir)
-    
-    if args.list:
-        conversations = storage.list_conversations()
-        
-        if not conversations:
-            logger.info("No conversations found.")
-        else:
-            print("\n" + "=" * 80)
-            print("CONVERSATION HISTORY")
-            print("=" * 80)
-            for conv in conversations:
-                # Format date nicely
-                created = conv['created_at'][:10]  # Just the date part
-                sessions = conv['session_count']
-                print(f"\n[{conv['index']}] {conv['title']}")
-                print(f"    Created: {created} | Sessions: {sessions}")
-            print("\n" + "-" * 80)
-            print("Use --show N to view a conversation")
-            print("Use --continue N \"query\" to continue a conversation")
-            print("-" * 80 + "\n")
-        return
-    
-    if args.show:
-        conversation = storage.get_conversation_by_index(args.show)
-        if conversation is None:
-            logger.error(f"Conversation {args.show} not found. Use --list to see available conversations.")
-            return
-        
-        print("\n" + "=" * 80)
-        print(f"CONVERSATION: {conversation['title']}")
-        print(f"Created: {conversation['created_at']}")
-        print("=" * 80)
-        
-        for i, session in enumerate(conversation.get('sessions', []), 1):
-            print(f"\n--- Session {i} ({session['timestamp'][:10]}) ---")
-            print(f"\nQuery: {session['query']}")
-            
-            results = session.get('results', {})
-            stage3 = results.get('stage3', {})
-            if stage3:
-                print(f"\nChairman's Synthesis:")
-                print("-" * 40)
-                print(stage3.get('response', 'No response'))
-            print("")
-        
-        print("=" * 80)
-        print(f"Use --continue {args.show} \"query\" to add to this conversation")
-        print("=" * 80 + "\n")
-        return
-    
-    # Handle --continue with query
-    if args.continue_conv:
-        if not args.query:
-            logger.error("Error: Please provide a query when using --continue")
-            logger.info("Usage: python council_skill.py --continue N \"Your follow-up question\"")
-            return
-        
-        conversation_id = storage.get_conversation_id_by_index(args.continue_conv)
-        if conversation_id is None:
-            logger.error(f"Conversation {args.continue_conv} not found. Use --list to see available conversations.")
-            return
-        
-        conversation = storage.get_conversation(conversation_id)
-        logger.info(f"Continuing conversation: {conversation['title']}")
-    else:
-        conversation_id = None
-    
-    if not args.query:
-        logger.error("Error: Please provide a query or use --setup for setup instructions")
-        parser.print_help()
-        return
-    
-    # Determine merge mode
-    merge_mode = None
-    merge_member = None
-    use_worktrees = args.worktrees
-    
-    if args.auto_merge:
-        merge_mode = "auto"
-        use_worktrees = True  # Auto-merge implies worktrees
-    elif args.merge:
-        merge_mode = "manual"
-        merge_member = args.merge
-        use_worktrees = True
-    elif args.dry_run:
-        merge_mode = "dry-run"
-        use_worktrees = True
-    
-    # Validate merge options
-    if (args.auto_merge or args.merge or args.confirm) and not use_worktrees:
-        logger.error("Error: Merge options require --worktrees or are implied by merge options")
-        return
-    
-    # no_commit option
-    no_commit = getattr(args, 'no_commit', False)
-    
-    try:
-        logger.info("Running LLM Council...")
-        logger.info("This may take a minute as multiple models are queried in parallel.\n")
-        
-        results = run_council(
-            args.query, 
-            use_worktrees=use_worktrees,
-            conversation_id=conversation_id,
-            merge_mode=merge_mode,
-            merge_member=merge_member,
-            confirm_merge=args.confirm,
-            no_commit=no_commit
-        )
-        
-        formatted = format_results(results)
-        print(formatted)
-        
-        # Log completion
-        logger.success("Council session complete. Check scripts/logs/ for detailed logs.")
-        
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    return api.run_council(
+        *args,
+        merge_options=merge_options,
+        **kwargs
+    )
 
 
 if __name__ == "__main__":
